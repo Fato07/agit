@@ -1,5 +1,10 @@
 # agit
 
+[![CI](https://github.com/fathindos/agit/actions/workflows/ci.yml/badge.svg)](https://github.com/fathindos/agit/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fathindos/agit)](https://github.com/fathindos/agit/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/fathindos/agit)](https://goreportcard.com/report/github.com/fathindos/agit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Infrastructure-aware Git orchestration for AI agents.
 
 **agit** gives AI coding agents persistent, queryable awareness of their Git infrastructure. It manages a local registry of repositories, orchestrates Git worktrees for agent isolation, detects cross-worktree conflicts, and coordinates task assignment across multiple agents.
@@ -78,7 +83,7 @@ Now any MCP-compatible agent can call `agit_list_repos()` on startup and immedia
 
 ## Architecture
 
-See [docs/architecture-spec.docx](docs/architecture-spec.docx) for the full specification.
+See [docs/agit-architecture-spec.pdf](docs/agit-architecture-spec.pdf) for the full specification.
 
 ## License
 

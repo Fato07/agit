@@ -1,4 +1,4 @@
-.PHONY: build install test clean
+.PHONY: build install test clean release-snapshot
 
 BINARY=agit
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -25,3 +25,6 @@ lint:
 
 tidy:
 	go mod tidy
+
+release-snapshot:
+	goreleaser release --snapshot --clean
