@@ -31,3 +31,5 @@ dist/
 # Personal tooling
 .specify/*
 .claude/*
+
+misc/*
