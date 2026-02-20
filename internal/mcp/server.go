@@ -18,6 +18,7 @@ func NewServer(db *registry.DB, cfg *config.Config) *server.MCPServer {
 
 	registerTools(s, db, cfg)
 	registerResources(s, db)
+	// Note: withIssueLink wraps each tool handler in registerTools
 
 	return s
 }
@@ -27,7 +28,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 		mcp.NewTool("agit_list_repos",
 			mcp.WithDescription("List all registered repositories"),
 		),
-		handleListRepos(db),
+		withIssueLink(handleListRepos(db)),
 	)
 
 	s.AddTool(
@@ -35,7 +36,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithDescription("Get detailed status for a specific repository"),
 			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
 		),
-		handleRepoStatus(db),
+		withIssueLink(handleRepoStatus(db)),
 	)
 
 	s.AddTool(
@@ -46,7 +47,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("branch", mcp.Description("Custom branch name (auto-generated if omitted)")),
 			mcp.WithString("agent", mcp.Description("Agent name to assign")),
 		),
-		handleSpawnWorktree(db, cfg),
+		withIssueLink(handleSpawnWorktree(db, cfg)),
 	)
 
 	s.AddTool(
@@ -55,7 +56,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
 			mcp.WithString("worktree_id", mcp.Required(), mcp.Description("Worktree ID to remove")),
 		),
-		handleRemoveWorktree(db),
+		withIssueLink(handleRemoveWorktree(db)),
 	)
 
 	s.AddTool(
@@ -63,7 +64,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithDescription("Scan for file conflicts across active worktrees"),
 			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
 		),
-		handleCheckConflicts(db),
+		withIssueLink(handleCheckConflicts(db)),
 	)
 
 	s.AddTool(
@@ -72,7 +73,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
 			mcp.WithString("status", mcp.Description("Filter by status (pending/claimed/in_progress/completed/failed)")),
 		),
-		handleListTasks(db),
+		withIssueLink(handleListTasks(db)),
 	)
 
 	s.AddTool(
@@ -81,7 +82,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("task_id", mcp.Required(), mcp.Description("Task ID to claim")),
 			mcp.WithString("agent_id", mcp.Required(), mcp.Description("Agent ID claiming the task")),
 		),
-		handleClaimTask(db),
+		withIssueLink(handleClaimTask(db)),
 	)
 
 	s.AddTool(
@@ -90,7 +91,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("task_id", mcp.Required(), mcp.Description("Task ID to complete")),
 			mcp.WithString("result", mcp.Description("Result description")),
 		),
-		handleCompleteTask(db),
+		withIssueLink(handleCompleteTask(db)),
 	)
 
 	s.AddTool(
@@ -99,7 +100,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
 			mcp.WithString("worktree_id", mcp.Required(), mcp.Description("Worktree ID to merge")),
 		),
-		handleMergeWorktree(db),
+		withIssueLink(handleMergeWorktree(db)),
 	)
 
 	s.AddTool(
@@ -108,7 +109,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithString("name", mcp.Required(), mcp.Description("Agent name")),
 			mcp.WithString("type", mcp.Required(), mcp.Description("Agent type (e.g., claude, custom)")),
 		),
-		handleRegisterAgent(db),
+		withIssueLink(handleRegisterAgent(db)),
 	)
 
 	s.AddTool(
@@ -116,7 +117,7 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 			mcp.WithDescription("Update agent heartbeat timestamp"),
 			mcp.WithString("agent_id", mcp.Required(), mcp.Description("Agent ID")),
 		),
-		handleHeartbeat(db),
+		withIssueLink(handleHeartbeat(db)),
 	)
 }
 

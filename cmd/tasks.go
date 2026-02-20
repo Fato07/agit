@@ -8,6 +8,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
+	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/registry"
 )
 
@@ -56,7 +57,7 @@ var tasksCmd = &cobra.Command{
 		// Claim task
 		if claim != "" {
 			if agent == "" {
-				return fmt.Errorf("--agent is required when claiming a task")
+				return apperrors.NewUserError("--agent is required when claiming a task")
 			}
 			agentObj, err := db.GetAgentByName(agent)
 			if err != nil {

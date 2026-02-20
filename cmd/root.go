@@ -3,8 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/spf13/cobra"
+
+	apperrors "github.com/fathindos/agit/internal/errors"
+	"github.com/fathindos/agit/internal/issuelink"
 )
 
 var Version = "0.1.0"
@@ -28,8 +32,36 @@ Get started:
 }
 
 func Execute() {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := debug.Stack()
+			fmt.Fprintf(os.Stderr, "agit crashed unexpectedly: %v\n\nStack trace:\n%s\n", r, stack)
+			if issuelink.Enabled() {
+				panicErr := fmt.Errorf("panic: %v", r)
+				link := issuelink.Build(issuelink.Context{
+					Err:     panicErr,
+					Command: os.Args,
+					Version: Version,
+				})
+				fmt.Fprintf(os.Stderr, "\nTo report this bug, open:\n  %s\n", link)
+			}
+			os.Exit(2)
+		}
+	}()
+
+	issuelink.AppVersion = Version
+	rootCmd.SilenceErrors = true
+
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if issuelink.Enabled() && !apperrors.IsUserError(err) {
+			link := issuelink.Build(issuelink.Context{
+				Err:     err,
+				Command: os.Args,
+				Version: Version,
+			})
+			fmt.Fprintf(os.Stderr, "\nTo report this bug, open:\n  %s\n", link)
+		}
 		os.Exit(1)
 	}
 }

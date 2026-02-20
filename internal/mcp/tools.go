@@ -13,7 +13,9 @@ import (
 
 	"github.com/fathindos/agit/internal/config"
 	"github.com/fathindos/agit/internal/conflicts"
+	apperrors "github.com/fathindos/agit/internal/errors"
 	gitops "github.com/fathindos/agit/internal/git"
+	"github.com/fathindos/agit/internal/issuelink"
 	"github.com/fathindos/agit/internal/registry"
 )
 
@@ -23,6 +25,20 @@ func jsonResult(v any) (*mcp.CallToolResult, error) {
 		return nil, fmt.Errorf("could not marshal response: %w", err)
 	}
 	return mcp.NewToolResultText(string(data)), nil
+}
+
+// wrapInternalError appends an issue link to internal (non-user) errors
+// so that AI agents or their operators can easily report bugs.
+// withIssueLink wraps an MCP tool handler to append issue links to internal errors.
+func withIssueLink(handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		result, err := handler(ctx, request)
+		if err != nil && !apperrors.IsUserError(err) && issuelink.Enabled() {
+			link := issuelink.ForError(err)
+			return result, fmt.Errorf("%w\n\nTo report this bug, open:\n  %s", err, link)
+		}
+		return result, err
+	}
 }
 
 func handleListRepos(db *registry.DB) mcpserver.ToolHandlerFunc {
@@ -67,7 +83,7 @@ func handleRepoStatus(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 
 		repo, err := db.GetRepo(repoName)
@@ -149,7 +165,7 @@ func handleSpawnWorktree(db *registry.DB, cfg *config.Config) mcpserver.ToolHand
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 		task, _ := request.Params.Arguments["task"].(string)
 		branch, _ := request.Params.Arguments["branch"].(string)
@@ -228,11 +244,11 @@ func handleRemoveWorktree(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 		worktreeID, _ := request.Params.Arguments["worktree_id"].(string)
 		if worktreeID == "" {
-			return nil, fmt.Errorf("worktree_id parameter is required")
+			return nil, apperrors.NewUserError("worktree_id parameter is required")
 		}
 
 		repo, err := db.GetRepo(repoName)
@@ -259,7 +275,7 @@ func handleCheckConflicts(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 
 		repo, err := db.GetRepo(repoName)
@@ -296,7 +312,7 @@ func handleListTasks(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 
 		repo, err := db.GetRepo(repoName)
@@ -348,11 +364,11 @@ func handleClaimTask(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		taskID, _ := request.Params.Arguments["task_id"].(string)
 		if taskID == "" {
-			return nil, fmt.Errorf("task_id parameter is required")
+			return nil, apperrors.NewUserError("task_id parameter is required")
 		}
 		agentID, _ := request.Params.Arguments["agent_id"].(string)
 		if agentID == "" {
-			return nil, fmt.Errorf("agent_id parameter is required")
+			return nil, apperrors.NewUserError("agent_id parameter is required")
 		}
 
 		if err := db.ClaimTask(taskID, agentID); err != nil {
@@ -371,7 +387,7 @@ func handleCompleteTask(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		taskID, _ := request.Params.Arguments["task_id"].(string)
 		if taskID == "" {
-			return nil, fmt.Errorf("task_id parameter is required")
+			return nil, apperrors.NewUserError("task_id parameter is required")
 		}
 
 		var resultPtr *string
@@ -394,11 +410,11 @@ func handleMergeWorktree(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		repoName, _ := request.Params.Arguments["repo"].(string)
 		if repoName == "" {
-			return nil, fmt.Errorf("repo parameter is required")
+			return nil, apperrors.NewUserError("repo parameter is required")
 		}
 		worktreeID, _ := request.Params.Arguments["worktree_id"].(string)
 		if worktreeID == "" {
-			return nil, fmt.Errorf("worktree_id parameter is required")
+			return nil, apperrors.NewUserError("worktree_id parameter is required")
 		}
 
 		repo, err := db.GetRepo(repoName)
@@ -449,11 +465,11 @@ func handleRegisterAgent(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		name, _ := request.Params.Arguments["name"].(string)
 		if name == "" {
-			return nil, fmt.Errorf("name parameter is required")
+			return nil, apperrors.NewUserError("name parameter is required")
 		}
 		agentType, _ := request.Params.Arguments["type"].(string)
 		if agentType == "" {
-			return nil, fmt.Errorf("type parameter is required")
+			return nil, apperrors.NewUserError("type parameter is required")
 		}
 
 		agent, err := db.RegisterAgent(name, agentType)
@@ -473,7 +489,7 @@ func handleHeartbeat(db *registry.DB) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		agentID, _ := request.Params.Arguments["agent_id"].(string)
 		if agentID == "" {
-			return nil, fmt.Errorf("agent_id parameter is required")
+			return nil, apperrors.NewUserError("agent_id parameter is required")
 		}
 
 		if err := db.Heartbeat(agentID); err != nil {
