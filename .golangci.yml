@@ -12,19 +12,17 @@ linters:
     - unused
     - misspell
     - revive
+  settings:
+    revive:
+      rules:
+        - name: exported
+          severity: warning
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
 
 formatters:
   enable:
     - gofmt
-
-linters-settings:
-  revive:
-    rules:
-      - name: exported
-        severity: warning
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
