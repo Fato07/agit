@@ -1,8 +1,9 @@
 # agit
 
-[![CI](https://github.com/fathindos/agit/actions/workflows/ci.yml/badge.svg)](https://github.com/fathindos/agit/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/fathindos/agit)](https://github.com/fathindos/agit/releases)
+[![CI](https://github.com/Fato07/agit/actions/workflows/ci.yml/badge.svg)](https://github.com/Fato07/agit/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Fato07/agit)](https://github.com/Fato07/agit/releases)
 [![Go Report Card](https://goreportcard.com/badge/github.com/fathindos/agit)](https://goreportcard.com/report/github.com/fathindos/agit)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Fato07/agit)](https://github.com/Fato07/agit/blob/main/go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Infrastructure-aware Git orchestration for AI agents.
@@ -83,7 +84,7 @@ Now any MCP-compatible agent can call `agit_list_repos()` on startup and immedia
 
 ## Architecture
 
-See [docs/agit-architecture-spec.pdf](docs/agit-architecture-spec.pdf) for the full specification.
+See [docs/integrations.md](docs/integrations.md) for MCP integration details.
 
 ## License
 
