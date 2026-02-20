@@ -32,4 +32,15 @@ Go 1.22: Follow standard conventions
 - 001-agit-architecture-impl: Added Go 1.22 + `github.com/mark3labs/mcp-go` v0.20.1 (MCP protocol), `github.com/spf13/cobra` v1.8.1 (CLI), `modernc.org/sqlite` v1.34.4 (database)
 
 <!-- MANUAL ADDITIONS START -->
+
+## CI Verification
+
+When fixing bugs or implementing features, always run:
+```bash
+go build ./...
+go test ./... -race
+golangci-lint run
+```
+All three must pass before creating a PR.
+
 <!-- MANUAL ADDITIONS END -->
