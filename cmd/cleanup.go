@@ -50,7 +50,7 @@ var cleanupCmd = &cobra.Command{
 				} else if staleOnly {
 					shouldRemove = wt.Status == "stale"
 				} else {
-					shouldRemove = wt.Status == "completed"
+					shouldRemove = wt.Status == "completed" || wt.Status == "stale"
 				}
 
 				if !shouldRemove {
