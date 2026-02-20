@@ -56,10 +56,10 @@ func (db *DB) RecordFileTouches(repoID, worktreeID string, touches []FileTouch) 
 
 // Conflict represents overlapping file modifications across worktrees
 type Conflict struct {
-	FilePath   string
-	Worktrees  []string // worktree IDs
-	AgentIDs   []string // corresponding agent IDs (may be empty)
-	TaskDescs  []string // corresponding task descriptions (may be empty)
+	FilePath  string
+	Worktrees []string // worktree IDs
+	AgentIDs  []string // corresponding agent IDs (may be empty)
+	TaskDescs []string // corresponding task descriptions (may be empty)
 }
 
 // FindConflicts detects files modified in multiple active worktrees for a repo

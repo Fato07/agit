@@ -34,13 +34,13 @@ func handleReposResource(db *registry.DB) func(ctx context.Context, request mcp.
 		}
 
 		type repoSummary struct {
-			Name             string `json:"name"`
-			Path             string `json:"path"`
-			DefaultBranch    string `json:"default_branch"`
-			RemoteURL        string `json:"remote_url"`
-			ActiveWorktrees  int    `json:"active_worktrees"`
-			PendingTasks     int    `json:"pending_tasks"`
-			ActiveAgents     int    `json:"active_agents"`
+			Name            string `json:"name"`
+			Path            string `json:"path"`
+			DefaultBranch   string `json:"default_branch"`
+			RemoteURL       string `json:"remote_url"`
+			ActiveWorktrees int    `json:"active_worktrees"`
+			PendingTasks    int    `json:"pending_tasks"`
+			ActiveAgents    int    `json:"active_agents"`
 		}
 
 		var items []repoSummary
@@ -278,12 +278,12 @@ func handleAgentsResource(db *registry.DB) func(ctx context.Context, request mcp
 			Repo   string `json:"repo"`
 		}
 		type agentDetail struct {
-			ID               string  `json:"id"`
-			Name             string  `json:"name"`
-			Type             string  `json:"type"`
-			Status           string  `json:"status"`
-			LastSeen         string  `json:"last_seen"`
-			CurrentWorktree  *wtInfo `json:"current_worktree"`
+			ID              string  `json:"id"`
+			Name            string  `json:"name"`
+			Type            string  `json:"type"`
+			Status          string  `json:"status"`
+			LastSeen        string  `json:"last_seen"`
+			CurrentWorktree *wtInfo `json:"current_worktree"`
 		}
 
 		var items []agentDetail
