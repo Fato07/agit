@@ -44,23 +44,6 @@ changelog:
       - "^ci:"
       - "^chore:"
 
-brews:
-  - repository:
-      owner: Fato07
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    commit_author:
-      name: agit-bot
-      email: bot@agit.dev
-    directory: Formula
-    homepage: "https://github.com/Fato07/agit"
-    description: "Infrastructure-aware Git orchestration for AI agents"
-    license: "MIT"
-    install: |
-      bin.install "agit"
-    test: |
-      system "#{bin}/agit", "--version"
-
 release:
   github:
     owner: Fato07
