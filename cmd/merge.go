@@ -6,6 +6,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	apperrors "github.com/fathindos/agit/internal/errors"
 	gitops "github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
 )
@@ -47,7 +48,7 @@ Runs a conflict check first unless --skip-conflict-check is set.`,
 			if err != nil {
 				fmt.Printf("%s Could not check merge compatibility: %v\n", yellow("WARNING:"), err)
 			} else if !canMerge {
-				return fmt.Errorf("merge would produce conflicts. Use --skip-conflict-check to force, or resolve manually")
+				return apperrors.NewUserError("merge would produce conflicts. Use --skip-conflict-check to force, or resolve manually")
 			}
 		}
 

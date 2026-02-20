@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/config"
+	apperrors "github.com/fathindos/agit/internal/errors"
 	mcpserver "github.com/fathindos/agit/internal/mcp"
 	"github.com/fathindos/agit/internal/registry"
 )
@@ -57,7 +58,7 @@ Configure in your agent's MCP settings:
 				return fmt.Errorf("SSE server error: %w", err)
 			}
 		default:
-			return fmt.Errorf("unknown transport %q (use stdio or sse)", transport)
+			return apperrors.NewUserErrorf("unknown transport %q (use stdio or sse)", transport)
 		}
 
 		return nil

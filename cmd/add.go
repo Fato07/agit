@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
 )
@@ -19,12 +20,12 @@ var addCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoPath, err := filepath.Abs(args[0])
 		if err != nil {
-			return fmt.Errorf("could not resolve path: %w", err)
+			return apperrors.NewUserErrorf("could not resolve path: %v", err)
 		}
 
 		// Validate it's a git repo
 		if !git.IsGitRepo(repoPath) {
-			return fmt.Errorf("%s is not a Git repository", repoPath)
+			return apperrors.NewUserErrorf("%s is not a Git repository", repoPath)
 		}
 
 		// Get name (flag or directory name)
