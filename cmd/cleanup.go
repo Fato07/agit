@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -34,6 +35,9 @@ var cleanupCmd = &cobra.Command{
 
 		removed := 0
 		for _, repo := range repos {
+			// Prune orphaned worktrees so they become available for cleanup
+			db.PruneOrphanedWorktrees(repo.ID)
+
 			worktrees, err := db.ListWorktrees(repo.ID, nil)
 			if err != nil {
 				continue
@@ -54,7 +58,9 @@ var cleanupCmd = &cobra.Command{
 				}
 
 				// Remove git worktree
-				gitops.RemoveWorktree(repo.Path, wt.Path)
+				if err := gitops.RemoveWorktree(repo.Path, wt.Path); err != nil {
+					fmt.Fprintf(os.Stderr, "  Warning: could not remove worktree %s: %v\n", wt.ID[:12], err)
+				}
 				// Delete branch
 				gitops.DeleteBranch(repo.Path, wt.Branch)
 				// Remove from registry

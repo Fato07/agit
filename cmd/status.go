@@ -48,6 +48,12 @@ var statusCmd = &cobra.Command{
 		for _, repo := range repos {
 			fmt.Printf("%s %s (%s)\n\n", bold("REPO:"), bold(repo.Name), repo.DefaultBranch)
 
+			// Prune orphaned worktrees before display
+			pruned, _ := db.PruneOrphanedWorktrees(repo.ID)
+			if pruned > 0 {
+				fmt.Printf("  %s %d worktree(s) marked stale (directory removed)\n\n", yellow("NOTICE:"), pruned)
+			}
+
 			// Active worktrees
 			activeStatus := "active"
 			worktrees, err := db.ListWorktrees(repo.ID, &activeStatus)

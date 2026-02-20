@@ -256,7 +256,7 @@ func handleRemoveWorktree(db *registry.DB) mcpserver.ToolHandlerFunc {
 			return nil, err
 		}
 
-		wt, err := db.GetWorktree(worktreeID)
+		wt, err := db.ResolveWorktree(repo.ID, worktreeID)
 		if err != nil {
 			return nil, err
 		}
@@ -333,6 +333,7 @@ func handleListTasks(db *registry.DB) mcpserver.ToolHandlerFunc {
 		type taskItem struct {
 			ID          string  `json:"id"`
 			Description string  `json:"description"`
+			Priority    int     `json:"priority"`
 			Status      string  `json:"status"`
 			Agent       *string `json:"agent"`
 			CreatedAt   string  `json:"created_at"`
@@ -350,6 +351,7 @@ func handleListTasks(db *registry.DB) mcpserver.ToolHandlerFunc {
 			items = append(items, taskItem{
 				ID:          t.ID,
 				Description: t.Description,
+				Priority:    t.Priority,
 				Status:      t.Status,
 				Agent:       agentName,
 				CreatedAt:   t.CreatedAt.Format("2006-01-02T15:04:05Z"),
@@ -422,7 +424,7 @@ func handleMergeWorktree(db *registry.DB) mcpserver.ToolHandlerFunc {
 			return nil, err
 		}
 
-		wt, err := db.GetWorktree(worktreeID)
+		wt, err := db.ResolveWorktree(repo.ID, worktreeID)
 		if err != nil {
 			return nil, err
 		}

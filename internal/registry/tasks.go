@@ -13,6 +13,7 @@ type Task struct {
 	ID              string
 	RepoID          string
 	Description     string
+	Priority        int
 	Status          string
 	AssignedAgentID *string
 	WorktreeID      *string
@@ -22,13 +23,13 @@ type Task struct {
 }
 
 // CreateTask creates a new task
-func (db *DB) CreateTask(repoID, description string) (*Task, error) {
+func (db *DB) CreateTask(repoID, description string, priority int) (*Task, error) {
 	id := "t-" + uuid.New().String()[:8]
 	now := time.Now()
 
 	_, err := db.conn.Exec(
-		`INSERT INTO tasks (id, repo_id, description, status, created_at) VALUES (?, ?, ?, 'pending', ?)`,
-		id, repoID, description, now,
+		`INSERT INTO tasks (id, repo_id, description, priority, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)`,
+		id, repoID, description, priority, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not create task: %w", err)
@@ -38,6 +39,7 @@ func (db *DB) CreateTask(repoID, description string) (*Task, error) {
 		ID:          id,
 		RepoID:      repoID,
 		Description: description,
+		Priority:    priority,
 		Status:      "pending",
 		CreatedAt:   now,
 	}, nil
@@ -99,9 +101,9 @@ func (db *DB) FailTask(taskID string, result *string) error {
 func (db *DB) GetTask(id string) (*Task, error) {
 	t := &Task{}
 	err := db.conn.QueryRow(
-		`SELECT id, repo_id, description, status, assigned_agent_id, worktree_id, created_at, completed_at, result
+		`SELECT id, repo_id, description, priority, status, assigned_agent_id, worktree_id, created_at, completed_at, result
 		 FROM tasks WHERE id = ?`, id,
-	).Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.AssignedAgentID,
+	).Scan(&t.ID, &t.RepoID, &t.Description, &t.Priority, &t.Status, &t.AssignedAgentID,
 		&t.WorktreeID, &t.CreatedAt, &t.CompletedAt, &t.Result)
 
 	if err == sql.ErrNoRows {
@@ -120,14 +122,14 @@ func (db *DB) ListTasks(repoID string, status *string) ([]*Task, error) {
 
 	if status != nil {
 		rows, err = db.conn.Query(
-			`SELECT id, repo_id, description, status, assigned_agent_id, worktree_id, created_at, completed_at, result
-			 FROM tasks WHERE repo_id = ? AND status = ? ORDER BY created_at DESC`,
+			`SELECT id, repo_id, description, priority, status, assigned_agent_id, worktree_id, created_at, completed_at, result
+			 FROM tasks WHERE repo_id = ? AND status = ? ORDER BY priority DESC, created_at DESC`,
 			repoID, *status,
 		)
 	} else {
 		rows, err = db.conn.Query(
-			`SELECT id, repo_id, description, status, assigned_agent_id, worktree_id, created_at, completed_at, result
-			 FROM tasks WHERE repo_id = ? ORDER BY created_at DESC`,
+			`SELECT id, repo_id, description, priority, status, assigned_agent_id, worktree_id, created_at, completed_at, result
+			 FROM tasks WHERE repo_id = ? ORDER BY priority DESC, created_at DESC`,
 			repoID,
 		)
 	}
@@ -139,7 +141,7 @@ func (db *DB) ListTasks(repoID string, status *string) ([]*Task, error) {
 	var tasks []*Task
 	for rows.Next() {
 		t := &Task{}
-		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Status, &t.AssignedAgentID,
+		if err := rows.Scan(&t.ID, &t.RepoID, &t.Description, &t.Priority, &t.Status, &t.AssignedAgentID,
 			&t.WorktreeID, &t.CreatedAt, &t.CompletedAt, &t.Result); err != nil {
 			return nil, fmt.Errorf("could not scan task: %w", err)
 		}

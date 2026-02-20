@@ -26,7 +26,10 @@ agit provides:
 ## Quick Start
 
 ```bash
-# Install
+# Install (binary)
+curl -sSfL https://raw.githubusercontent.com/Fato07/agit/main/install.sh | sh
+
+# Or install from source
 go install github.com/fathindos/agit@latest
 
 # Initialize
@@ -49,6 +52,11 @@ agit status
 # Merge completed work back
 agit merge <worktree-id> --cleanup
 ```
+
+## Demo
+
+<!-- Record with: https://github.com/charmbracelet/vhs -->
+_Demo recording coming soon._
 
 ## MCP Integration
 
@@ -81,10 +89,6 @@ Now any MCP-compatible agent can call `agit_list_repos()` on startup and immedia
 | `agit merge <id>` | Merge worktree back to base branch |
 | `agit cleanup` | Remove completed/stale worktrees |
 | `agit serve` | Start MCP server |
-
-## Architecture
-
-See [docs/integrations.md](docs/integrations.md) for MCP integration details.
 
 ## License
 

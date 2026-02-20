@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -31,6 +32,13 @@ Configure in your agent's MCP settings:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		transport, _ := cmd.Flags().GetString("transport")
 		port, _ := cmd.Flags().GetInt("port")
+
+		if cmd.Flags().Changed("port") && !cmd.Flags().Changed("transport") {
+			transport = "sse"
+		}
+		if cmd.Flags().Changed("port") && cmd.Flags().Changed("transport") && transport == "stdio" {
+			fmt.Fprintln(os.Stderr, "Warning: --port is only used with --transport=sse, ignoring")
+		}
 
 		cfg, err := config.Load()
 		if err != nil {

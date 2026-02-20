@@ -31,10 +31,24 @@ Runs a conflict check first unless --skip-conflict-check is set.`,
 		green := color.New(color.FgGreen).SprintFunc()
 		yellow := color.New(color.FgYellow).SprintFunc()
 
-		// Find worktree (support partial ID match)
+		// Find worktree (support exact or prefix ID match)
+		// First try exact match to get repo context
 		wt, err := db.GetWorktree(worktreeID)
 		if err != nil {
-			return err
+			// If exact match fails, try all repos for prefix match
+			repos, repoErr := db.ListRepos()
+			if repoErr != nil {
+				return err
+			}
+			for _, r := range repos {
+				if found, findErr := db.FindWorktreeByPrefix(r.ID, worktreeID); findErr == nil {
+					wt = found
+					break
+				}
+			}
+			if wt == nil {
+				return err
+			}
 		}
 
 		repo, err := db.GetRepoByID(wt.RepoID)

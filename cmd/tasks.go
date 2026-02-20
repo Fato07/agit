@@ -25,6 +25,7 @@ var tasksCmd = &cobra.Command{
 		fail, _ := cmd.Flags().GetString("fail")
 		result, _ := cmd.Flags().GetString("result")
 		agent, _ := cmd.Flags().GetString("agent")
+		priority, _ := cmd.Flags().GetInt("priority")
 
 		db, err := registry.Open()
 		if err != nil {
@@ -46,7 +47,7 @@ var tasksCmd = &cobra.Command{
 
 		// Create task
 		if create != "" {
-			task, err := db.CreateTask(repo.ID, create)
+			task, err := db.CreateTask(repo.ID, create, priority)
 			if err != nil {
 				return err
 			}
@@ -106,11 +107,22 @@ var tasksCmd = &cobra.Command{
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Status", "Agent", "Description"})
+		table.SetHeader([]string{"ID", "Priority", "Status", "Agent", "Description"})
 		table.SetBorder(false)
 		table.SetColumnSeparator("")
 		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
 		table.SetAlignment(tablewriter.ALIGN_LEFT)
+
+		priorityLabel := func(p int) string {
+			switch p {
+			case 2:
+				return "critical"
+			case 1:
+				return "high"
+			default:
+				return "normal"
+			}
+		}
 
 		for _, t := range tasks {
 			agentStr := "-"
@@ -120,7 +132,7 @@ var tasksCmd = &cobra.Command{
 					agentStr = a.Name
 				}
 			}
-			table.Append([]string{t.ID, t.Status, agentStr, t.Description})
+			table.Append([]string{t.ID, priorityLabel(t.Priority), t.Status, agentStr, t.Description})
 		}
 
 		table.Render()
@@ -130,6 +142,7 @@ var tasksCmd = &cobra.Command{
 
 func init() {
 	tasksCmd.Flags().String("create", "", "Create a new task with this description")
+	tasksCmd.Flags().Int("priority", 0, "Task priority (0=normal, 1=high, 2=critical)")
 	tasksCmd.Flags().String("claim", "", "Claim a task by ID")
 	tasksCmd.Flags().String("complete", "", "Complete a task by ID")
 	tasksCmd.Flags().String("fail", "", "Fail a task by ID")

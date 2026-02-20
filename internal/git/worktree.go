@@ -42,7 +42,9 @@ func RemoveWorktree(repoPath, worktreePath string) error {
 	_, err := runGit(repoPath, "worktree", "remove", worktreePath, "--force")
 	if err != nil {
 		// If git worktree remove fails, try manual cleanup
-		os.RemoveAll(worktreePath)
+		if removeErr := os.RemoveAll(worktreePath); removeErr != nil {
+			return fmt.Errorf("could not remove worktree at %s: git remove failed (%w), manual cleanup also failed (%v)", worktreePath, err, removeErr)
+		}
 		// Prune stale worktree refs
 		runGit(repoPath, "worktree", "prune")
 	}

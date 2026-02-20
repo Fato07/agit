@@ -3,6 +3,7 @@ package registry
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -121,6 +122,74 @@ func (db *DB) UpdateWorktreeStatus(id, status string) error {
 func (db *DB) DeleteWorktree(id string) error {
 	_, err := db.conn.Exec(`DELETE FROM worktrees WHERE id = ?`, id)
 	return err
+}
+
+// PruneOrphanedWorktrees marks active worktrees as stale if their directory no longer exists
+func (db *DB) PruneOrphanedWorktrees(repoID string) (int, error) {
+	activeStatus := "active"
+	worktrees, err := db.ListWorktrees(repoID, &activeStatus)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, wt := range worktrees {
+		if _, err := os.Stat(wt.Path); os.IsNotExist(err) {
+			if err := db.UpdateWorktreeStatus(wt.ID, "stale"); err != nil {
+				return count, fmt.Errorf("could not mark worktree %s as stale: %w", wt.ID, err)
+			}
+			count++
+		}
+	}
+	return count, nil
+}
+
+// FindWorktreeByPrefix finds a worktree by ID prefix within a repo
+func (db *DB) FindWorktreeByPrefix(repoID, prefix string) (*Worktree, error) {
+	if len(prefix) < 4 {
+		return nil, fmt.Errorf("worktree ID prefix must be at least 4 characters")
+	}
+
+	rows, err := db.conn.Query(
+		`SELECT id, repo_id, path, branch, agent_id, task_description, status, created_at, updated_at
+		 FROM worktrees WHERE repo_id = ? AND id LIKE ?`,
+		repoID, prefix+"%",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not search worktrees: %w", err)
+	}
+	defer rows.Close()
+
+	var matches []*Worktree
+	for rows.Next() {
+		wt := &Worktree{}
+		if err := rows.Scan(&wt.ID, &wt.RepoID, &wt.Path, &wt.Branch, &wt.AgentID,
+			&wt.TaskDescription, &wt.Status, &wt.CreatedAt, &wt.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("could not scan worktree: %w", err)
+		}
+		matches = append(matches, wt)
+	}
+
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("no worktree matching prefix %q", prefix)
+	case 1:
+		return matches[0], nil
+	default:
+		return nil, fmt.Errorf("ambiguous prefix %q: matches %d worktrees", prefix, len(matches))
+	}
+}
+
+// ResolveWorktree finds a worktree by exact ID or prefix within a repo
+func (db *DB) ResolveWorktree(repoID, idOrPrefix string) (*Worktree, error) {
+	wt, err := db.GetWorktree(idOrPrefix)
+	if err == nil {
+		if wt.RepoID != repoID {
+			return nil, fmt.Errorf("worktree %q does not belong to this repository", idOrPrefix)
+		}
+		return wt, nil
+	}
+	return db.FindWorktreeByPrefix(repoID, idOrPrefix)
 }
 
 // ListAllActiveWorktrees returns all active worktrees across all repos

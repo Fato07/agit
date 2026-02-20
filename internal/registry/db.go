@@ -3,6 +3,7 @@ package registry
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -122,6 +123,18 @@ func (db *DB) migrate() error {
 	for _, m := range migrations {
 		if _, err := db.conn.Exec(m); err != nil {
 			return fmt.Errorf("migration failed: %s: %w", m[:60], err)
+		}
+	}
+
+	// Additive schema migrations (ignore "duplicate column" errors)
+	alterMigrations := []string{
+		`ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`,
+	}
+	for _, m := range alterMigrations {
+		if _, err := db.conn.Exec(m); err != nil {
+			if !strings.Contains(err.Error(), "duplicate column") {
+				return fmt.Errorf("migration failed: %w", err)
+			}
 		}
 	}
 

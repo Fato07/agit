@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # agit installer
-# Usage: curl -sSfL https://raw.githubusercontent.com/fathindos/agit/main/install.sh | sh
+# Usage: curl -sSfL https://raw.githubusercontent.com/Fato07/agit/main/install.sh | sh
 
-REPO="fathindos/agit"
+REPO="Fato07/agit"
 BINARY="agit"
 INSTALL_DIR="/usr/local/bin"
 
