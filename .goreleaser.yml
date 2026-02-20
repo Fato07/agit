@@ -46,14 +46,14 @@ changelog:
 
 brews:
   - repository:
-      owner: fathindos
+      owner: Fato07
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     commit_author:
       name: agit-bot
       email: bot@agit.dev
     directory: Formula
-    homepage: "https://github.com/fathindos/agit"
+    homepage: "https://github.com/Fato07/agit"
     description: "Infrastructure-aware Git orchestration for AI agents"
     license: "MIT"
     install: |
@@ -63,7 +63,7 @@ brews:
 
 release:
   github:
-    owner: fathindos
+    owner: Fato07
     name: agit
   draft: false
   prerelease: auto
@@ -72,8 +72,8 @@ release:
 nfpms:
   - id: packages
     package_name: agit
-    vendor: fathindos
-    homepage: https://github.com/fathindos/agit
+    vendor: Fato07
+    homepage: https://github.com/Fato07/agit
     description: "Infrastructure-aware Git orchestration for AI agents"
     license: MIT
     formats:
