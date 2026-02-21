@@ -14,7 +14,7 @@ import (
 	"github.com/fathindos/agit/internal/ui"
 )
 
-var Version = "0.1.0"
+var Version = "0.2.0"
 
 var rootCmd = &cobra.Command{
 	Use:   "agit",
