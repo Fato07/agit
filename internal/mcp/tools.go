@@ -504,3 +504,254 @@ func handleHeartbeat(db *registry.DB) mcpserver.ToolHandlerFunc {
 		})
 	}
 }
+
+func handleCreateTask(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		repoName, _ := request.Params.Arguments["repo"].(string)
+		if repoName == "" {
+			return nil, apperrors.NewUserError("repo parameter is required")
+		}
+		description, _ := request.Params.Arguments["description"].(string)
+		if description == "" {
+			return nil, apperrors.NewUserError("description parameter is required")
+		}
+
+		priority := 0
+		if p, ok := request.Params.Arguments["priority"].(float64); ok {
+			priority = int(p)
+		}
+
+		repo, err := db.GetRepo(repoName)
+		if err != nil {
+			return nil, err
+		}
+
+		task, err := db.CreateTask(repo.ID, description, priority)
+		if err != nil {
+			return nil, fmt.Errorf("could not create task: %w", err)
+		}
+
+		return jsonResult(map[string]any{
+			"task_id":     task.ID,
+			"description": task.Description,
+			"priority":    task.Priority,
+			"status":      task.Status,
+		})
+	}
+}
+
+func handleFailTask(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		taskID, _ := request.Params.Arguments["task_id"].(string)
+		if taskID == "" {
+			return nil, apperrors.NewUserError("task_id parameter is required")
+		}
+
+		var resultPtr *string
+		if r, ok := request.Params.Arguments["result"].(string); ok && r != "" {
+			resultPtr = &r
+		}
+
+		if err := db.FailTask(taskID, resultPtr); err != nil {
+			return nil, err
+		}
+
+		return jsonResult(map[string]any{
+			"failed":  true,
+			"task_id": taskID,
+		})
+	}
+}
+
+func handleStartTask(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		taskID, _ := request.Params.Arguments["task_id"].(string)
+		if taskID == "" {
+			return nil, apperrors.NewUserError("task_id parameter is required")
+		}
+		worktreeID, _ := request.Params.Arguments["worktree_id"].(string)
+		if worktreeID == "" {
+			return nil, apperrors.NewUserError("worktree_id parameter is required")
+		}
+
+		if err := db.StartTask(taskID, worktreeID); err != nil {
+			return nil, err
+		}
+
+		return jsonResult(map[string]any{
+			"started":     true,
+			"task_id":     taskID,
+			"worktree_id": worktreeID,
+		})
+	}
+}
+
+func handleListAgents(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		agents, err := db.ListAgents()
+		if err != nil {
+			return nil, fmt.Errorf("could not list agents: %w", err)
+		}
+
+		type agentItem struct {
+			ID       string  `json:"id"`
+			Name     string  `json:"name"`
+			Type     string  `json:"type"`
+			Status   string  `json:"status"`
+			LastSeen string  `json:"last_seen"`
+			Worktree *string `json:"current_worktree,omitempty"`
+		}
+
+		var items []agentItem
+		for _, a := range agents {
+			items = append(items, agentItem{
+				ID:       a.ID,
+				Name:     a.Name,
+				Type:     a.Type,
+				Status:   a.Status,
+				LastSeen: a.LastSeen.Format("2006-01-02T15:04:05Z"),
+				Worktree: a.CurrentWorktreeID,
+			})
+		}
+
+		return jsonResult(items)
+	}
+}
+
+func handleListWorktrees(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		repoName, _ := request.Params.Arguments["repo"].(string)
+		if repoName == "" {
+			return nil, apperrors.NewUserError("repo parameter is required")
+		}
+
+		repo, err := db.GetRepo(repoName)
+		if err != nil {
+			return nil, err
+		}
+
+		var statusFilter *string
+		if s, ok := request.Params.Arguments["status"].(string); ok && s != "" {
+			statusFilter = &s
+		}
+
+		worktrees, err := db.ListWorktrees(repo.ID, statusFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		type wtItem struct {
+			ID     string  `json:"id"`
+			Path   string  `json:"path"`
+			Branch string  `json:"branch"`
+			Status string  `json:"status"`
+			Agent  *string `json:"agent,omitempty"`
+			Task   *string `json:"task,omitempty"`
+		}
+
+		var items []wtItem
+		for _, wt := range worktrees {
+			items = append(items, wtItem{
+				ID:     wt.ID,
+				Path:   wt.Path,
+				Branch: wt.Branch,
+				Status: wt.Status,
+				Agent:  wt.AgentID,
+				Task:   wt.TaskDescription,
+			})
+		}
+
+		return jsonResult(items)
+	}
+}
+
+func handleGetTask(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		taskID, _ := request.Params.Arguments["task_id"].(string)
+		if taskID == "" {
+			return nil, apperrors.NewUserError("task_id parameter is required")
+		}
+
+		task, err := db.GetTask(taskID)
+		if err != nil {
+			return nil, err
+		}
+
+		return jsonResult(map[string]any{
+			"id":           task.ID,
+			"repo_id":      task.RepoID,
+			"description":  task.Description,
+			"priority":     task.Priority,
+			"status":       task.Status,
+			"agent_id":     task.AssignedAgentID,
+			"worktree_id":  task.WorktreeID,
+			"created_at":   task.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			"completed_at": task.CompletedAt,
+			"result":       task.Result,
+		})
+	}
+}
+
+func handleAddRepo(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		repoPath, _ := request.Params.Arguments["path"].(string)
+		if repoPath == "" {
+			return nil, apperrors.NewUserError("path parameter is required")
+		}
+
+		name, _ := request.Params.Arguments["name"].(string)
+		if name == "" {
+			name = filepath.Base(repoPath)
+		}
+
+		if !gitops.IsGitRepo(repoPath) {
+			return nil, apperrors.NewUserErrorf("%s is not a Git repository", repoPath)
+		}
+
+		remoteURL, err := gitops.GetRemoteURL(repoPath)
+		if err != nil {
+			remoteURL = ""
+		}
+
+		defaultBranch, err := gitops.GetDefaultBranch(repoPath)
+		if err != nil {
+			defaultBranch = "main"
+		}
+
+		repo, err := db.AddRepo(name, repoPath, remoteURL, defaultBranch)
+		if err != nil {
+			return nil, fmt.Errorf("could not add repo: %w", err)
+		}
+
+		return jsonResult(map[string]string{
+			"name":           repo.Name,
+			"path":           repo.Path,
+			"remote_url":     repo.RemoteURL,
+			"default_branch": repo.DefaultBranch,
+		})
+	}
+}
+
+func handleCleanupWorktrees(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		repoName, _ := request.Params.Arguments["repo"].(string)
+		if repoName == "" {
+			return nil, apperrors.NewUserError("repo parameter is required")
+		}
+
+		repo, err := db.GetRepo(repoName)
+		if err != nil {
+			return nil, err
+		}
+
+		count, err := db.PruneOrphanedWorktrees(repo.ID)
+		if err != nil {
+			return nil, fmt.Errorf("could not prune worktrees: %w", err)
+		}
+
+		return jsonResult(map[string]any{
+			"pruned": count,
+			"repo":   repoName,
+		})
+	}
+}

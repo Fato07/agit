@@ -119,6 +119,75 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 		),
 		withIssueLink(handleHeartbeat(db)),
 	)
+
+	s.AddTool(
+		mcp.NewTool("agit_create_task",
+			mcp.WithDescription("Create a new task for a repository"),
+			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
+			mcp.WithString("description", mcp.Required(), mcp.Description("Task description")),
+			mcp.WithNumber("priority", mcp.Description("Task priority (higher = more urgent, default 0)")),
+		),
+		withIssueLink(handleCreateTask(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_fail_task",
+			mcp.WithDescription("Mark a task as failed with optional reason"),
+			mcp.WithString("task_id", mcp.Required(), mcp.Description("Task ID to fail")),
+			mcp.WithString("result", mcp.Description("Failure reason")),
+		),
+		withIssueLink(handleFailTask(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_start_task",
+			mcp.WithDescription("Mark a claimed task as in-progress and associate a worktree"),
+			mcp.WithString("task_id", mcp.Required(), mcp.Description("Task ID to start")),
+			mcp.WithString("worktree_id", mcp.Required(), mcp.Description("Worktree ID for the task")),
+		),
+		withIssueLink(handleStartTask(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_list_agents",
+			mcp.WithDescription("List all registered AI agents"),
+		),
+		withIssueLink(handleListAgents(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_list_worktrees",
+			mcp.WithDescription("List worktrees for a repository"),
+			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
+			mcp.WithString("status", mcp.Description("Filter by status (active/completed/stale/conflict)")),
+		),
+		withIssueLink(handleListWorktrees(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_get_task",
+			mcp.WithDescription("Get detailed information about a specific task"),
+			mcp.WithString("task_id", mcp.Required(), mcp.Description("Task ID")),
+		),
+		withIssueLink(handleGetTask(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_add_repo",
+			mcp.WithDescription("Register a Git repository with agit"),
+			mcp.WithString("path", mcp.Required(), mcp.Description("Absolute path to the Git repository")),
+			mcp.WithString("name", mcp.Description("Alias for the repository (defaults to directory name)")),
+		),
+		withIssueLink(handleAddRepo(db)),
+	)
+
+	s.AddTool(
+		mcp.NewTool("agit_cleanup_worktrees",
+			mcp.WithDescription("Prune orphaned worktrees whose directories no longer exist"),
+			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
+		),
+		withIssueLink(handleCleanupWorktrees(db)),
+	)
 }
 
 func registerResources(s *server.MCPServer, db *registry.DB) {

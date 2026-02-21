@@ -12,13 +12,18 @@ func ModifiedFiles(repoPath, baseBranch, branch string) ([]string, error) {
 		return nil, fmt.Errorf("could not get modified files: %w", err)
 	}
 
+	return parseModifiedFiles(out), nil
+}
+
+// parseModifiedFiles parses the output of git diff --name-only into a file list.
+func parseModifiedFiles(output string) []string {
 	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line != "" {
 			files = append(files, line)
 		}
 	}
-	return files, nil
+	return files
 }
 
 // ModifiedFilesWithStatus returns files with their change type (A/M/D/R)
@@ -28,8 +33,14 @@ func ModifiedFilesWithStatus(repoPath, baseBranch, branch string) (map[string]st
 		return nil, fmt.Errorf("could not get modified files: %w", err)
 	}
 
+	return parseModifiedFilesWithStatus(out), nil
+}
+
+// parseModifiedFilesWithStatus parses the output of git diff --name-status
+// into a map of file path to change type.
+func parseModifiedFilesWithStatus(output string) map[string]string {
 	files := make(map[string]string)
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		if line == "" {
 			continue
 		}
@@ -51,5 +62,5 @@ func ModifiedFilesWithStatus(repoPath, baseBranch, branch string) (map[string]st
 			files[path] = "modified"
 		}
 	}
-	return files, nil
+	return files
 }

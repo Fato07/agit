@@ -88,7 +88,80 @@ Now any MCP-compatible agent can call `agit_list_repos()` on startup and immedia
 | `agit tasks <repo>` | Manage tasks (create/claim/complete) |
 | `agit merge <id>` | Merge worktree back to base branch |
 | `agit cleanup` | Remove completed/stale worktrees |
-| `agit serve` | Start MCP server |
+| `agit serve` | Start MCP server (stdio or SSE) |
+| `agit update` / `agit upgrade` | Self-update to the latest release |
+| `agit config show` | Display current configuration |
+| `agit config set <key> <value>` | Set a configuration value |
+| `agit config path` | Print configuration file path |
+| `agit config reset` | Reset configuration to defaults |
+
+## Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--no-color` | Disable colored output |
+| `-q`, `--quiet` | Suppress informational messages |
+| `-o`, `--output <format>` | Output format: `text` (default) or `json` |
+| `-i`, `--interactive` | Enable interactive selection mode |
+
+## Configuration
+
+agit stores its configuration in `~/.agit/config.toml`. Use `agit config` subcommands or edit the file directly.
+
+```toml
+[server]
+transport = "stdio"       # "stdio" or "sse"
+port = 3847               # Port for SSE transport
+
+[defaults]
+branch_prefix = "agit/"           # Prefix for auto-generated branch names
+worktree_dir = ".worktrees"       # Directory for worktrees within repos
+cleanup_stale_after = "24h"       # Duration before stale worktrees are cleaned
+auto_conflict_check = true        # Check for conflicts automatically
+
+[agent]
+heartbeat_interval = "30s"        # Agent heartbeat frequency
+stale_after = "5m"                # Duration before agents are marked disconnected
+
+[ui]
+color = ""                # "auto", "always", or "never" (empty = auto)
+output_format = ""        # "text" or "json" (empty = text)
+compact = false           # Compact output mode
+
+[updates]
+enabled = true            # Enable automatic update checking
+check_interval = "24h"   # How often to check for updates
+```
+
+All dot-notation keys for `agit config set`:
+
+`server.transport`, `server.port`, `defaults.branch_prefix`, `defaults.worktree_dir`, `defaults.cleanup_stale_after`, `defaults.auto_conflict_check`, `agent.heartbeat_interval`, `agent.stale_after`, `ui.color`, `ui.output_format`, `ui.compact`, `updates.enabled`, `updates.check_interval`
+
+## MCP Tools Reference
+
+When running as an MCP server (`agit serve`), the following tools are available to agents:
+
+| Tool | Description |
+|------|-------------|
+| `agit_list_repos` | List all registered repositories |
+| `agit_repo_status` | Get detailed status for a specific repository |
+| `agit_spawn_worktree` | Create an isolated worktree for an agent |
+| `agit_remove_worktree` | Remove a worktree from disk and registry |
+| `agit_check_conflicts` | Scan for file conflicts across active worktrees |
+| `agit_list_tasks` | List tasks for a repository |
+| `agit_claim_task` | Atomically claim a pending task for an agent |
+| `agit_complete_task` | Mark a task as completed with optional result |
+| `agit_merge_worktree` | Merge a worktree branch into the default branch |
+| `agit_register_agent` | Register a new AI agent |
+| `agit_heartbeat` | Update agent heartbeat timestamp |
+| `agit_create_task` | Create a new task for a repository |
+| `agit_fail_task` | Mark a task as failed with optional reason |
+| `agit_start_task` | Mark a claimed task as in-progress with a worktree |
+| `agit_list_agents` | List all registered AI agents |
+| `agit_list_worktrees` | List worktrees for a repository |
+| `agit_get_task` | Get detailed information about a specific task |
+| `agit_add_repo` | Register a Git repository via MCP |
+| `agit_cleanup_worktrees` | Prune orphaned worktrees |
 
 ## License
 

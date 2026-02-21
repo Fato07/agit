@@ -15,6 +15,28 @@ type DB struct {
 	conn *sql.DB
 }
 
+// OpenMemory creates an in-memory SQLite database for testing.
+// It applies the same PRAGMA settings and migrations as Open.
+func OpenMemory() (*DB, error) {
+	conn, err := sql.Open("sqlite", ":memory:?_busy_timeout=5000")
+	if err != nil {
+		return nil, fmt.Errorf("could not open in-memory database: %w", err)
+	}
+
+	if _, err := conn.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("could not enable foreign keys: %w", err)
+	}
+
+	db := &DB{conn: conn}
+	if err := db.migrate(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("could not run migrations: %w", err)
+	}
+
+	return db, nil
+}
+
 // Open opens (or creates) the agit database
 func Open() (*DB, error) {
 	path, err := config.DBPath()
