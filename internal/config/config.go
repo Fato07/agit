@@ -13,6 +13,14 @@ type Config struct {
 	Server   ServerConfig   `toml:"server"`
 	Defaults DefaultsConfig `toml:"defaults"`
 	Agent    AgentConfig    `toml:"agent"`
+	UI       UIConfig       `toml:"ui"`
+}
+
+// UIConfig controls CLI display behavior.
+type UIConfig struct {
+	Color        string `toml:"color"`         // "auto", "always", "never"
+	OutputFormat string `toml:"output_format"` // "text", "json"
+	Compact      bool   `toml:"compact"`
 }
 
 type ServerConfig struct {

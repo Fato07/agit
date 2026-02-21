@@ -2,21 +2,29 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
 	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
+	"github.com/fathindos/agit/internal/ui/interactive"
 )
 
+type taskJSON struct {
+	ID          string `json:"id"`
+	Priority    string `json:"priority"`
+	Status      string `json:"status"`
+	Agent       string `json:"agent"`
+	Description string `json:"description"`
+}
+
 var tasksCmd = &cobra.Command{
-	Use:   "tasks <repo>",
-	Short: "Manage tasks for a repository",
-	Long:  `Create, list, claim, and complete tasks for a repository.`,
-	Args:  cobra.ExactArgs(1),
+	Use:               "tasks <repo>",
+	Short:             "Manage tasks for a repository",
+	Long:              `Create, list, claim, and complete tasks for a repository.`,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		repoName := args[0]
 		create, _ := cmd.Flags().GetString("create")
@@ -26,6 +34,7 @@ var tasksCmd = &cobra.Command{
 		result, _ := cmd.Flags().GetString("result")
 		agent, _ := cmd.Flags().GetString("agent")
 		priority, _ := cmd.Flags().GetInt("priority")
+		isInteractive, _ := cmd.Flags().GetBool("interactive")
 
 		db, err := registry.Open()
 		if err != nil {
@@ -38,8 +47,6 @@ var tasksCmd = &cobra.Command{
 			return err
 		}
 
-		green := color.New(color.FgGreen).SprintFunc()
-
 		var resultPtr *string
 		if result != "" {
 			resultPtr = &result
@@ -51,7 +58,10 @@ var tasksCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			fmt.Printf("%s Created task: %s - %s\n", green("✓"), task.ID, task.Description)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]string{"status": "ok", "message": "created", "id": task.ID, "description": task.Description})
+			}
+			ui.Success("Created task: %s - %s", task.ID, task.Description)
 			return nil
 		}
 
@@ -73,7 +83,10 @@ var tasksCmd = &cobra.Command{
 			if err := db.ClaimTask(claim, agentObj.ID); err != nil {
 				return err
 			}
-			fmt.Printf("%s Task %s claimed by %s\n", green("✓"), claim, agent)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]string{"status": "ok", "message": "claimed", "task": claim, "agent": agent})
+			}
+			ui.Success("Task %s claimed by %s", claim, agent)
 			return nil
 		}
 
@@ -82,7 +95,10 @@ var tasksCmd = &cobra.Command{
 			if err := db.CompleteTask(complete, resultPtr); err != nil {
 				return err
 			}
-			fmt.Printf("%s Task %s completed\n", green("✓"), complete)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]string{"status": "ok", "message": "completed", "task": complete})
+			}
+			ui.Success("Task %s completed", complete)
 			return nil
 		}
 
@@ -91,8 +107,16 @@ var tasksCmd = &cobra.Command{
 			if err := db.FailTask(fail, resultPtr); err != nil {
 				return err
 			}
-			fmt.Printf("%s Task %s marked as failed\n", green("✓"), fail)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]string{"status": "ok", "message": "failed", "task": fail})
+			}
+			ui.Success("Task %s marked as failed", fail)
 			return nil
+		}
+
+		// Interactive mode: select a task and choose an action
+		if isInteractive {
+			return tasksInteractive(db, repo)
 		}
 
 		// List tasks
@@ -102,16 +126,12 @@ var tasksCmd = &cobra.Command{
 		}
 
 		if len(tasks) == 0 {
+			if ui.IsJSON() {
+				return ui.RenderJSON([]interface{}{})
+			}
 			fmt.Printf("No tasks for %s. Create one with: agit tasks %s --create \"description\"\n", repoName, repoName)
 			return nil
 		}
-
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Priority", "Status", "Agent", "Description"})
-		table.SetBorder(false)
-		table.SetColumnSeparator("")
-		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
 
 		priorityLabel := func(p int) string {
 			switch p {
@@ -124,6 +144,29 @@ var tasksCmd = &cobra.Command{
 			}
 		}
 
+		if ui.IsJSON() {
+			var items []taskJSON
+			for _, t := range tasks {
+				agentStr := "-"
+				if t.AssignedAgentID != nil {
+					a, err := db.GetAgent(*t.AssignedAgentID)
+					if err == nil {
+						agentStr = a.Name
+					}
+				}
+				items = append(items, taskJSON{
+					ID:          t.ID,
+					Priority:    priorityLabel(t.Priority),
+					Status:      t.Status,
+					Agent:       agentStr,
+					Description: t.Description,
+				})
+			}
+			return ui.RenderJSON(items)
+		}
+
+		table := ui.NewTable("ID", "Priority", "Status", "Agent", "Description")
+
 		for _, t := range tasks {
 			agentStr := "-"
 			if t.AssignedAgentID != nil {
@@ -132,12 +175,70 @@ var tasksCmd = &cobra.Command{
 					agentStr = a.Name
 				}
 			}
-			table.Append([]string{t.ID, priorityLabel(t.Priority), t.Status, agentStr, t.Description})
+			pLabel := priorityLabel(t.Priority)
+			table.Append([]string{
+				t.ID,
+				ui.PriorityColor(pLabel),
+				ui.StatusColor(t.Status),
+				agentStr,
+				t.Description,
+			})
 		}
 
 		table.Render()
 		return nil
 	},
+}
+
+func tasksInteractive(db *registry.DB, repo *registry.Repo) error {
+	tasks, err := db.ListTasks(repo.ID, nil)
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		fmt.Printf("No tasks for %s.\n", repo.Name)
+		return nil
+	}
+
+	var items []interactive.Item
+	for _, t := range tasks {
+		items = append(items, interactive.Item{
+			ID:    t.ID,
+			Label: fmt.Sprintf("[%s] %s", t.Status, t.Description),
+			Desc:  t.ID,
+		})
+	}
+
+	selected, err := interactive.Select("Select a task:", items)
+	if err != nil {
+		return err
+	}
+
+	// Choose action
+	actions := []interactive.Item{
+		{ID: "complete", Label: "Complete", Desc: "Mark task as completed"},
+		{ID: "fail", Label: "Fail", Desc: "Mark task as failed"},
+	}
+
+	action, err := interactive.Select("Choose action for "+selected.ID+":", actions)
+	if err != nil {
+		return err
+	}
+
+	switch action.ID {
+	case "complete":
+		if err := db.CompleteTask(selected.ID, nil); err != nil {
+			return err
+		}
+		ui.Success("Task %s completed", selected.ID)
+	case "fail":
+		if err := db.FailTask(selected.ID, nil); err != nil {
+			return err
+		}
+		ui.Success("Task %s marked as failed", selected.ID)
+	}
+
+	return nil
 }
 
 func init() {

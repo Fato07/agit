@@ -3,28 +3,55 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/conflicts"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
 )
 
+type statusJSON struct {
+	Repos []statusRepoJSON `json:"repos"`
+}
+
+type statusRepoJSON struct {
+	Name          string               `json:"name"`
+	DefaultBranch string               `json:"default_branch"`
+	Worktrees     []statusWorktreeJSON `json:"worktrees"`
+	Conflicts     []statusConflictJSON `json:"conflicts,omitempty"`
+	Tasks         []statusTaskJSON     `json:"tasks,omitempty"`
+}
+
+type statusWorktreeJSON struct {
+	ID     string `json:"id"`
+	Branch string `json:"branch"`
+	Agent  string `json:"agent"`
+	Task   string `json:"task,omitempty"`
+}
+
+type statusConflictJSON struct {
+	File      string `json:"file"`
+	Worktrees int    `json:"worktrees"`
+}
+
+type statusTaskJSON struct {
+	Status      string `json:"status"`
+	Description string `json:"description"`
+	Agent       string `json:"agent"`
+}
+
 var statusCmd = &cobra.Command{
-	Use:   "status [repo]",
-	Short: "Show active worktrees, agents, and conflicts",
-	Long:  `Displays the current state of all registered repos or a specific repo.`,
-	Args:  cobra.MaximumNArgs(1),
+	Use:               "status [repo]",
+	Short:             "Show active worktrees, agents, and conflicts",
+	Long:              `Displays the current state of all registered repos or a specific repo.`,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		db, err := registry.Open()
 		if err != nil {
 			return fmt.Errorf("could not open registry: %w", err)
 		}
 		defer db.Close()
-
-		bold := color.New(color.Bold).SprintFunc()
-		gray := color.New(color.FgHiBlack).SprintFunc()
-		yellow := color.New(color.FgYellow).SprintFunc()
 
 		var repos []*registry.Repo
 		if len(args) > 0 {
@@ -41,17 +68,33 @@ var statusCmd = &cobra.Command{
 		}
 
 		if len(repos) == 0 {
+			if ui.IsJSON() {
+				return ui.RenderJSON(statusJSON{Repos: []statusRepoJSON{}})
+			}
 			fmt.Println("No repositories registered. Add one with: agit add <path>")
 			return nil
 		}
 
+		var jsonResult statusJSON
+
 		for _, repo := range repos {
-			fmt.Printf("%s %s (%s)\n\n", bold("REPO:"), bold(repo.Name), repo.DefaultBranch)
+			var repoData statusRepoJSON
+			if ui.IsJSON() {
+				repoData = statusRepoJSON{
+					Name:          repo.Name,
+					DefaultBranch: repo.DefaultBranch,
+				}
+			}
+
+			if !ui.IsJSON() {
+				fmt.Printf("%s %s (%s)\n", ui.T.Bold("REPO:"), ui.T.Bold(repo.Name), repo.DefaultBranch)
+			}
 
 			// Prune orphaned worktrees before display
 			pruned, _ := db.PruneOrphanedWorktrees(repo.ID)
-			if pruned > 0 {
-				fmt.Printf("  %s %d worktree(s) marked stale (directory removed)\n\n", yellow("NOTICE:"), pruned)
+			if pruned > 0 && !ui.IsJSON() {
+				ui.Blank()
+				ui.Warning("%d worktree(s) marked stale (directory removed)", pruned)
 			}
 
 			// Active worktrees
@@ -61,8 +104,26 @@ var statusCmd = &cobra.Command{
 				return err
 			}
 
-			if len(worktrees) > 0 {
-				fmt.Println("ACTIVE WORKTREES:")
+			if ui.IsJSON() {
+				for _, wt := range worktrees {
+					wtJSON := statusWorktreeJSON{
+						ID:     wt.ID[:12],
+						Branch: wt.Branch,
+						Agent:  "-",
+					}
+					if wt.AgentID != nil {
+						agent, err := db.GetAgent(*wt.AgentID)
+						if err == nil {
+							wtJSON.Agent = agent.Name
+						}
+					}
+					if wt.TaskDescription != nil {
+						wtJSON.Task = *wt.TaskDescription
+					}
+					repoData.Worktrees = append(repoData.Worktrees, wtJSON)
+				}
+			} else if len(worktrees) > 0 {
+				ui.Section("Active Worktrees")
 				for _, wt := range worktrees {
 					agentStr := "-"
 					if wt.AgentID != nil {
@@ -76,14 +137,14 @@ var statusCmd = &cobra.Command{
 						taskStr = *wt.TaskDescription
 					}
 					fmt.Printf("  %s  branch:%s  agent:%s  task:%s\n",
-						gray(wt.ID[:12]),
-						gray(wt.Branch),
-						gray(agentStr),
-						gray(taskStr),
+						ui.T.Muted(wt.ID[:12]),
+						ui.T.Muted(wt.Branch),
+						ui.T.Muted(agentStr),
+						ui.T.Muted(taskStr),
 					)
 				}
-				fmt.Println()
-			} else {
+				ui.Blank()
+			} else if !ui.IsJSON() {
 				fmt.Println("  No active worktrees")
 			}
 
@@ -93,37 +154,67 @@ var statusCmd = &cobra.Command{
 			// Conflicts
 			conflictList, err := db.FindConflicts(repo.ID)
 			if err == nil && len(conflictList) > 0 {
-				fmt.Println("CONFLICTS:")
-				for _, c := range conflictList {
-					fmt.Printf("  %s %s modified in %d worktrees\n",
-						yellow("WARNING:"),
-						c.FilePath,
-						len(c.Worktrees),
-					)
+				if ui.IsJSON() {
+					for _, c := range conflictList {
+						repoData.Conflicts = append(repoData.Conflicts, statusConflictJSON{
+							File:      c.FilePath,
+							Worktrees: len(c.Worktrees),
+						})
+					}
+				} else {
+					ui.Section("Conflicts")
+					for _, c := range conflictList {
+						ui.Warning("%s modified in %d worktrees", c.FilePath, len(c.Worktrees))
+					}
+					ui.Blank()
 				}
-				fmt.Println()
 			}
 
 			// Tasks
 			tasks, err := db.ListTasks(repo.ID, nil)
 			if err == nil && len(tasks) > 0 {
-				fmt.Println("TASKS:")
-				for _, t := range tasks {
-					agentStr := "(unclaimed)"
-					if t.AssignedAgentID != nil {
-						agent, err := db.GetAgent(*t.AssignedAgentID)
-						if err == nil {
-							agentStr = agent.Name
+				if ui.IsJSON() {
+					for _, t := range tasks {
+						agentStr := ""
+						if t.AssignedAgentID != nil {
+							agent, err := db.GetAgent(*t.AssignedAgentID)
+							if err == nil {
+								agentStr = agent.Name
+							}
 						}
+						repoData.Tasks = append(repoData.Tasks, statusTaskJSON{
+							Status:      t.Status,
+							Description: t.Description,
+							Agent:       agentStr,
+						})
 					}
-					fmt.Printf("  [%s] %s %s\n",
-						gray(t.Status),
-						t.Description,
-						gray(agentStr),
-					)
+				} else {
+					ui.Section("Tasks")
+					for _, t := range tasks {
+						agentStr := "(unclaimed)"
+						if t.AssignedAgentID != nil {
+							agent, err := db.GetAgent(*t.AssignedAgentID)
+							if err == nil {
+								agentStr = agent.Name
+							}
+						}
+						fmt.Printf("  [%s] %s %s\n",
+							ui.StatusColor(t.Status),
+							t.Description,
+							ui.T.Muted(agentStr),
+						)
+					}
+					ui.Blank()
 				}
-				fmt.Println()
 			}
+
+			if ui.IsJSON() {
+				jsonResult.Repos = append(jsonResult.Repos, repoData)
+			}
+		}
+
+		if ui.IsJSON() {
+			return ui.RenderJSON(jsonResult)
 		}
 
 		return nil

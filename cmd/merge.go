@@ -3,22 +3,26 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	apperrors "github.com/fathindos/agit/internal/errors"
 	gitops "github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
+	"github.com/fathindos/agit/internal/ui/interactive"
 )
 
 var mergeCmd = &cobra.Command{
-	Use:   "merge <worktree-id>",
+	Use:   "merge [worktree-id]",
 	Short: "Merge a worktree branch back into the base branch",
 	Long: `Merges the worktree's branch into the repository's default branch.
-Runs a conflict check first unless --skip-conflict-check is set.`,
-	Args: cobra.ExactArgs(1),
+Runs a conflict check first unless --skip-conflict-check is set.
+
+With -i (interactive), presents a selector if no worktree ID is specified.`,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeWorktreeIDs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		worktreeID := args[0]
+		isInteractive, _ := cmd.Flags().GetBool("interactive")
 		skipCheck, _ := cmd.Flags().GetBool("skip-conflict-check")
 		cleanup, _ := cmd.Flags().GetBool("cleanup")
 
@@ -28,27 +32,57 @@ Runs a conflict check first unless --skip-conflict-check is set.`,
 		}
 		defer db.Close()
 
-		green := color.New(color.FgGreen).SprintFunc()
-		yellow := color.New(color.FgYellow).SprintFunc()
+		var wt *registry.Worktree
 
-		// Find worktree (support exact or prefix ID match)
-		// First try exact match to get repo context
-		wt, err := db.GetWorktree(worktreeID)
-		if err != nil {
-			// If exact match fails, try all repos for prefix match
-			repos, repoErr := db.ListRepos()
-			if repoErr != nil {
-				return err
-			}
-			for _, r := range repos {
-				if found, findErr := db.FindWorktreeByPrefix(r.ID, worktreeID); findErr == nil {
-					wt = found
-					break
+		if len(args) > 0 {
+			worktreeID := args[0]
+			wt, err = db.GetWorktree(worktreeID)
+			if err != nil {
+				repos, repoErr := db.ListRepos()
+				if repoErr != nil {
+					return err
+				}
+				for _, r := range repos {
+					if found, findErr := db.FindWorktreeByPrefix(r.ID, worktreeID); findErr == nil {
+						wt = found
+						break
+					}
+				}
+				if wt == nil {
+					return err
 				}
 			}
-			if wt == nil {
+		} else if isInteractive {
+			worktrees, err := db.ListAllActiveWorktrees()
+			if err != nil {
 				return err
 			}
+			if len(worktrees) == 0 {
+				fmt.Println("No active worktrees to merge.")
+				return nil
+			}
+			var items []interactive.Item
+			for _, w := range worktrees {
+				desc := w.Branch
+				if w.TaskDescription != nil {
+					desc += " - " + *w.TaskDescription
+				}
+				items = append(items, interactive.Item{
+					ID:    w.ID,
+					Label: w.ID[:12],
+					Desc:  desc,
+				})
+			}
+			selected, err := interactive.Select("Select a worktree to merge:", items)
+			if err != nil {
+				return err
+			}
+			wt, err = db.GetWorktree(selected.ID)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("requires a worktree-id argument (or use -i for interactive mode)")
 		}
 
 		repo, err := db.GetRepoByID(wt.RepoID)
@@ -60,7 +94,7 @@ Runs a conflict check first unless --skip-conflict-check is set.`,
 		if !skipCheck {
 			canMerge, err := gitops.CanMergeCleanly(repo.Path, wt.Branch)
 			if err != nil {
-				fmt.Printf("%s Could not check merge compatibility: %v\n", yellow("WARNING:"), err)
+				ui.Warning("Could not check merge compatibility: %v", err)
 			} else if !canMerge {
 				return apperrors.NewUserError("merge would produce conflicts. Use --skip-conflict-check to force, or resolve manually")
 			}
@@ -75,17 +109,31 @@ Runs a conflict check first unless --skip-conflict-check is set.`,
 			return err
 		}
 
-		fmt.Printf("%s Merged %s into %s\n", green("✓"), wt.Branch, repo.DefaultBranch)
-
-		// Update worktree status
 		db.UpdateWorktreeStatus(wt.ID, "completed")
 
-		// Cleanup if requested
+		if ui.IsJSON() {
+			result := map[string]string{
+				"status":  "ok",
+				"message": "merged",
+				"branch":  wt.Branch,
+				"into":    repo.DefaultBranch,
+			}
+			if cleanup {
+				gitops.RemoveWorktree(repo.Path, wt.Path)
+				gitops.DeleteBranch(repo.Path, wt.Branch)
+				db.DeleteWorktree(wt.ID)
+				result["cleanup"] = "done"
+			}
+			return ui.RenderJSON(result)
+		}
+
+		ui.Success("Merged %s into %s", wt.Branch, repo.DefaultBranch)
+
 		if cleanup {
 			gitops.RemoveWorktree(repo.Path, wt.Path)
 			gitops.DeleteBranch(repo.Path, wt.Branch)
 			db.DeleteWorktree(wt.ID)
-			fmt.Printf("%s Cleaned up worktree and branch\n", green("✓"))
+			ui.Success("Cleaned up worktree and branch")
 		}
 
 		return nil

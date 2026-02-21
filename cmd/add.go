@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
 )
 
 var addCmd = &cobra.Command{
@@ -57,15 +57,23 @@ var addCmd = &cobra.Command{
 			return fmt.Errorf("could not register repo: %w", err)
 		}
 
-		green := color.New(color.FgGreen).SprintFunc()
-		gray := color.New(color.FgHiBlack).SprintFunc()
-
-		fmt.Printf("%s Registered: %s\n", green("✓"), color.New(color.Bold).Sprint(repo.Name))
-		fmt.Printf("  Path:   %s\n", gray(repo.Path))
-		if repo.RemoteURL != "" {
-			fmt.Printf("  Remote: %s\n", gray(repo.RemoteURL))
+		if ui.IsJSON() {
+			return ui.RenderJSON(map[string]string{
+				"status":         "ok",
+				"message":        "registered",
+				"name":           repo.Name,
+				"path":           repo.Path,
+				"remote_url":     repo.RemoteURL,
+				"default_branch": repo.DefaultBranch,
+			})
 		}
-		fmt.Printf("  Branch: %s\n", gray(repo.DefaultBranch))
+
+		ui.Success("Registered: %s", ui.T.Bold(repo.Name))
+		ui.KeyValue("Path", repo.Path)
+		if repo.RemoteURL != "" {
+			ui.KeyValue("Remote", repo.RemoteURL)
+		}
+		ui.KeyValue("Branch", repo.DefaultBranch)
 
 		return nil
 	},

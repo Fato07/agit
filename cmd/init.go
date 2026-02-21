@@ -3,11 +3,11 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/config"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
 )
 
 var initCmd = &cobra.Command{
@@ -37,17 +37,26 @@ var initCmd = &cobra.Command{
 		}
 		db.Close()
 
-		green := color.New(color.FgGreen).SprintFunc()
-		gray := color.New(color.FgHiBlack).SprintFunc()
+		if ui.IsJSON() {
+			return ui.RenderJSON(map[string]string{
+				"status":   "ok",
+				"message":  "agit initialized",
+				"config":   configPath,
+				"database": dbPath,
+				"dir":      dir,
+			})
+		}
 
-		fmt.Printf("%s agit initialized\n\n", green("✓"))
-		fmt.Printf("  Config:   %s\n", gray(configPath))
-		fmt.Printf("  Database: %s\n", gray(dbPath))
-		fmt.Printf("  Dir:      %s\n\n", gray(dir))
-		fmt.Printf("Get started:\n")
-		fmt.Printf("  agit add <path>    Register a Git repository\n")
-		fmt.Printf("  agit repos         List registered repositories\n")
-		fmt.Printf("  agit serve         Start MCP server for agents\n")
+		ui.Success("agit initialized")
+		ui.Blank()
+		ui.KeyValue("Config", configPath)
+		ui.KeyValue("Database", dbPath)
+		ui.KeyValue("Dir", dir)
+		ui.Blank()
+		fmt.Println("Get started:")
+		fmt.Println("  agit add <path>    Register a Git repository")
+		fmt.Println("  agit repos         List registered repositories")
+		fmt.Println("  agit serve         Start MCP server for agents")
 
 		return nil
 	},

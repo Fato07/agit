@@ -2,16 +2,23 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"time"
 
-	"github.com/fatih/color"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/config"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
 )
+
+type agentJSON struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Status   string `json:"status"`
+	LastSeen string `json:"last_seen"`
+	Worktree string `json:"worktree"`
+}
 
 var agentsCmd = &cobra.Command{
 	Use:   "agents",
@@ -27,8 +34,6 @@ var agentsCmd = &cobra.Command{
 		}
 		defer db.Close()
 
-		green := color.New(color.FgGreen).SprintFunc()
-
 		// Sweep stale agents
 		if sweep {
 			cfg, err := config.Load()
@@ -43,7 +48,10 @@ var agentsCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-			fmt.Printf("%s Swept %d stale agent(s)\n", green("✓"), count)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]interface{}{"status": "ok", "message": "swept", "count": count})
+			}
+			ui.Success("Swept %d stale agent(s)", count)
 			return nil
 		}
 
@@ -52,7 +60,10 @@ var agentsCmd = &cobra.Command{
 			if err := db.RemoveAgent(remove); err != nil {
 				return err
 			}
-			fmt.Printf("%s Removed agent %q\n", green("✓"), remove)
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]string{"status": "ok", "message": "removed", "name": remove})
+			}
+			ui.Success("Removed agent %q", remove)
 			return nil
 		}
 
@@ -63,16 +74,40 @@ var agentsCmd = &cobra.Command{
 		}
 
 		if len(agents) == 0 {
+			if ui.IsJSON() {
+				return ui.RenderJSON([]interface{}{})
+			}
 			fmt.Println("No agents registered. Agents are created when spawning worktrees with --agent.")
 			return nil
 		}
 
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Type", "Status", "Last Seen", "Worktree"})
-		table.SetBorder(false)
-		table.SetColumnSeparator("")
-		table.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
-		table.SetAlignment(tablewriter.ALIGN_LEFT)
+		if ui.IsJSON() {
+			var items []agentJSON
+			for _, a := range agents {
+				wtStr := "-"
+				if a.CurrentWorktreeID != nil {
+					wt, err := db.GetWorktree(*a.CurrentWorktreeID)
+					if err == nil {
+						wtStr = wt.Branch
+					}
+				}
+				idShort := a.ID
+				if len(idShort) > 12 {
+					idShort = idShort[:12]
+				}
+				items = append(items, agentJSON{
+					ID:       idShort,
+					Name:     a.Name,
+					Type:     a.Type,
+					Status:   a.Status,
+					LastSeen: a.LastSeen.Format("2006-01-02 15:04"),
+					Worktree: wtStr,
+				})
+			}
+			return ui.RenderJSON(items)
+		}
+
+		table := ui.NewTable("ID", "Name", "Type", "Status", "Last Seen", "Worktree")
 
 		for _, a := range agents {
 			wtStr := "-"
@@ -90,7 +125,7 @@ var agentsCmd = &cobra.Command{
 				idShort,
 				a.Name,
 				a.Type,
-				a.Status,
+				ui.StatusColor(a.Status),
 				a.LastSeen.Format("2006-01-02 15:04"),
 				wtStr,
 			})

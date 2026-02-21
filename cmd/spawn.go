@@ -5,33 +5,31 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fatih/color"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/config"
 	gitops "github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
+	"github.com/fathindos/agit/internal/ui"
+	"github.com/fathindos/agit/internal/ui/interactive"
 )
 
 var spawnCmd = &cobra.Command{
-	Use:   "spawn <repo>",
+	Use:   "spawn [repo]",
 	Short: "Create an isolated worktree for an agent",
 	Long: `Creates a new Git worktree branched from the repo's default branch.
 The worktree provides an isolated workspace where an agent can make changes
-without affecting other agents or the main branch.`,
-	Args: cobra.ExactArgs(1),
+without affecting other agents or the main branch.
+
+With -i (interactive), presents a selector if no repo is specified.`,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeRepoNames,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		repoName := args[0]
+		isInteractive, _ := cmd.Flags().GetBool("interactive")
 		task, _ := cmd.Flags().GetString("task")
 		branch, _ := cmd.Flags().GetString("branch")
 		agentName, _ := cmd.Flags().GetString("agent")
-
-		// Load config
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("could not load config: %w", err)
-		}
 
 		// Open registry
 		db, err := registry.Open()
@@ -39,6 +37,41 @@ without affecting other agents or the main branch.`,
 			return fmt.Errorf("could not open registry: %w", err)
 		}
 		defer db.Close()
+
+		var repoName string
+		if len(args) > 0 {
+			repoName = args[0]
+		} else if isInteractive {
+			repos, err := db.ListRepos()
+			if err != nil {
+				return err
+			}
+			if len(repos) == 0 {
+				fmt.Println("No repositories registered. Add one with: agit add <path>")
+				return nil
+			}
+			var items []interactive.Item
+			for _, r := range repos {
+				items = append(items, interactive.Item{
+					ID:    r.Name,
+					Label: r.Name,
+					Desc:  r.Path,
+				})
+			}
+			selected, err := interactive.Select("Select a repository:", items)
+			if err != nil {
+				return err
+			}
+			repoName = selected.ID
+		} else {
+			return fmt.Errorf("requires a repo argument (or use -i for interactive mode)")
+		}
+
+		// Load config
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("could not load config: %w", err)
+		}
 
 		// Get repo
 		repo, err := db.GetRepo(repoName)
@@ -53,7 +86,6 @@ without affecting other agents or the main branch.`,
 				// Slugify the task description
 				slug := strings.ToLower(task)
 				slug = strings.ReplaceAll(slug, " ", "-")
-				// Keep only alphanumeric and hyphens
 				cleaned := ""
 				for _, c := range slug {
 					if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' {
@@ -85,7 +117,6 @@ without affecting other agents or the main branch.`,
 				return err
 			}
 			if agent == nil {
-				// Auto-register agent
 				agent, err = db.RegisterAgent(agentName, "custom")
 				if err != nil {
 					return err
@@ -102,28 +133,40 @@ without affecting other agents or the main branch.`,
 		// Record in registry
 		wt, err := db.CreateWorktree(repo.ID, worktreePath, branch, agentID, taskDesc)
 		if err != nil {
-			// Clean up the git worktree if registry insert fails
 			gitops.RemoveWorktree(repo.Path, worktreePath)
 			return fmt.Errorf("could not record worktree: %w", err)
 		}
 
-		// Update agent's current worktree
 		if agentID != nil {
 			db.UpdateAgentWorktree(*agentID, &wt.ID)
 		}
 
-		green := color.New(color.FgGreen).SprintFunc()
-		gray := color.New(color.FgHiBlack).SprintFunc()
+		if ui.IsJSON() {
+			result := map[string]string{
+				"status":   "ok",
+				"message":  "created",
+				"path":     worktreePath,
+				"branch":   branch,
+				"worktree": wt.ID,
+			}
+			if agentName != "" {
+				result["agent"] = agentName
+			}
+			if task != "" {
+				result["task"] = task
+			}
+			return ui.RenderJSON(result)
+		}
 
-		fmt.Printf("%s Created worktree: %s\n", green("✓"), gray(worktreePath))
-		fmt.Printf("  Branch: %s\n", gray(branch))
+		ui.Success("Created worktree: %s", ui.T.Muted(worktreePath))
+		ui.KeyValue("Branch", branch)
 		if agentName != "" {
-			fmt.Printf("  Agent:  %s\n", gray(agentName))
+			ui.KeyValue("Agent", agentName)
 		}
 		if task != "" {
-			fmt.Printf("  Task:   %s\n", gray(task))
+			ui.KeyValue("Task", task)
 		}
-		fmt.Printf("\nAgent can work in: %s\n", color.New(color.Bold).Sprint(worktreePath))
+		fmt.Printf("\nAgent can work in: %s\n", ui.T.Bold(worktreePath))
 
 		return nil
 	},
@@ -133,5 +176,6 @@ func init() {
 	spawnCmd.Flags().StringP("task", "t", "", "Description of what the agent will do")
 	spawnCmd.Flags().StringP("branch", "b", "", "Custom branch name (auto-generated if omitted)")
 	spawnCmd.Flags().StringP("agent", "a", "", "Agent name to assign this worktree to")
+	_ = spawnCmd.RegisterFlagCompletionFunc("agent", completeAgentNames)
 	rootCmd.AddCommand(spawnCmd)
 }

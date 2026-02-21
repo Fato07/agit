@@ -5,10 +5,13 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
+	"github.com/fathindos/agit/internal/config"
 	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/issuelink"
+	"github.com/fathindos/agit/internal/ui"
 )
 
 var Version = "0.1.0"
@@ -29,6 +32,64 @@ Get started:
   agit status        Show active worktrees and conflicts
   agit serve         Start the MCP server for agent integration`,
 	Version: Version,
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		// Skip UI init for serve (MCP uses raw stdout)
+		if cmd.Name() == "serve" {
+			return nil
+		}
+
+		// Load config for UI settings
+		cfg, err := config.Load()
+		if err != nil {
+			// Non-fatal: use defaults if config can't be loaded
+			cfg = config.DefaultConfig()
+		}
+
+		// Apply --no-color flag or config
+		noColor, _ := cmd.Flags().GetBool("no-color")
+		switch {
+		case noColor:
+			color.NoColor = true
+		case os.Getenv("NO_COLOR") != "" || os.Getenv("AGIT_NO_COLOR") != "":
+			color.NoColor = true
+		case cfg.UI.Color == "never":
+			color.NoColor = true
+		case cfg.UI.Color == "always":
+			color.NoColor = false
+		default: // "auto" or empty
+			if !ui.IsTerminal() {
+				color.NoColor = true
+			}
+		}
+
+		// Re-initialize theme after color state is set
+		ui.T = ui.DefaultTheme
+
+		// Apply --quiet flag
+		quiet, _ := cmd.Flags().GetBool("quiet")
+		ui.Quiet = quiet
+
+		// Apply --output flag (flag overrides config)
+		output, _ := cmd.Flags().GetString("output")
+		if output == "" {
+			output = cfg.UI.OutputFormat
+		}
+		switch output {
+		case "json":
+			ui.CurrentFormat = ui.FormatJSON
+		default:
+			ui.CurrentFormat = ui.FormatText
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringP("output", "o", "", "Output format: text or json")
+	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output")
+	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "Suppress informational messages")
+	rootCmd.PersistentFlags().BoolP("interactive", "i", false, "Enable interactive selection mode")
 }
 
 func Execute() {
