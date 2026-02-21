@@ -83,6 +83,7 @@ var statusCmd = &cobra.Command{
 				repoData = statusRepoJSON{
 					Name:          repo.Name,
 					DefaultBranch: repo.DefaultBranch,
+					Worktrees:     make([]statusWorktreeJSON, 0),
 				}
 			}
 

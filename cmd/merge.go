@@ -82,7 +82,7 @@ With -i (interactive), presents a selector if no worktree ID is specified.`,
 				return err
 			}
 		} else {
-			return fmt.Errorf("requires a worktree-id argument (or use -i for interactive mode)")
+			return apperrors.NewUserError("requires a worktree-id argument (or use -i for interactive mode)")
 		}
 
 		repo, err := db.GetRepoByID(wt.RepoID)

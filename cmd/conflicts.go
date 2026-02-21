@@ -50,7 +50,7 @@ in more than one worktree, indicating potential merge conflicts.`,
 			}
 		}
 
-		var allConflicts []conflictJSON
+		allConflicts := make([]conflictJSON, 0)
 		totalConflicts := 0
 
 		for _, repo := range repos {

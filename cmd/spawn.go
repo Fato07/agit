@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/fathindos/agit/internal/config"
+	apperrors "github.com/fathindos/agit/internal/errors"
 	gitops "github.com/fathindos/agit/internal/git"
 	"github.com/fathindos/agit/internal/registry"
 	"github.com/fathindos/agit/internal/ui"
@@ -64,7 +65,7 @@ With -i (interactive), presents a selector if no repo is specified.`,
 			}
 			repoName = selected.ID
 		} else {
-			return fmt.Errorf("requires a repo argument (or use -i for interactive mode)")
+			return apperrors.NewUserError("requires a repo argument (or use -i for interactive mode)")
 		}
 
 		// Load config
