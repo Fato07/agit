@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -12,9 +14,13 @@ import (
 	apperrors "github.com/fathindos/agit/internal/errors"
 	"github.com/fathindos/agit/internal/issuelink"
 	"github.com/fathindos/agit/internal/ui"
+	"github.com/fathindos/agit/internal/update"
 )
 
 var Version = "0.2.0"
+
+// updateNotice carries a message from the background update checker.
+var updateNotice chan string
 
 var rootCmd = &cobra.Command{
 	Use:   "agit",
@@ -81,6 +87,26 @@ Get started:
 			ui.CurrentFormat = ui.FormatText
 		}
 
+		// Launch background update check (skip for update, serve, completion commands)
+		name := cmd.Name()
+		if !quiet && !ui.IsJSON() && name != "update" && name != "upgrade" && !strings.HasPrefix(name, "__") {
+			startBackgroundUpdateCheck(cfg)
+		}
+
+		return nil
+	},
+	PersistentPostRunE: func(cmd *cobra.Command, _ []string) error {
+		if updateNotice == nil {
+			return nil
+		}
+		// Non-blocking read: if the check hasn't finished, skip silently
+		select {
+		case msg := <-updateNotice:
+			if msg != "" {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+		default:
+		}
 		return nil
 	},
 }
@@ -90,6 +116,59 @@ func init() {
 	rootCmd.PersistentFlags().Bool("no-color", false, "Disable colored output")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "Suppress informational messages")
 	rootCmd.PersistentFlags().BoolP("interactive", "i", false, "Enable interactive selection mode")
+
+	// Branded version output
+	rootCmd.SetVersionTemplate(ui.T.Brand(ui.Sym.Zap+" agit v"+Version) + "\n")
+}
+
+// startBackgroundUpdateCheck launches a goroutine that checks for new versions.
+func startBackgroundUpdateCheck(cfg *config.Config) {
+	if !cfg.Updates.Enabled {
+		return
+	}
+	interval, err := time.ParseDuration(cfg.Updates.CheckInterval)
+	if err != nil || interval <= 0 {
+		return
+	}
+
+	updateNotice = make(chan string, 1)
+
+	go func() {
+		cache, err := update.LoadCache()
+		if err != nil {
+			return
+		}
+
+		if !cache.ShouldCheck(interval) {
+			// Use cached result
+			if cache.LatestVersion != "" && update.IsNewer(Version, cache.LatestVersion) {
+				updateNotice <- fmt.Sprintf(
+					"\nA new version of agit is available: %s (current: v%s). Run \"agit update\" to upgrade.",
+					cache.LatestVersion, Version,
+				)
+			}
+			return
+		}
+
+		release, err := update.FetchLatestRelease()
+		if err != nil {
+			// Network failure — don't cache the error, just skip silently
+			return
+		}
+
+		// Update cache
+		cache.LastCheck = time.Now()
+		cache.LatestVersion = release.TagName
+		cache.LatestURL = release.HTMLURL
+		_ = update.SaveCache(cache) // best-effort
+
+		if update.IsNewer(Version, release.TagName) {
+			updateNotice <- fmt.Sprintf(
+				"\nA new version of agit is available: %s (current: v%s). Run \"agit update\" to upgrade.",
+				release.TagName, Version,
+			)
+		}
+	}()
 }
 
 func Execute() {

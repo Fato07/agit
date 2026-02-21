@@ -14,6 +14,13 @@ type Config struct {
 	Defaults DefaultsConfig `toml:"defaults"`
 	Agent    AgentConfig    `toml:"agent"`
 	UI       UIConfig       `toml:"ui"`
+	Updates  UpdatesConfig  `toml:"updates"`
+}
+
+// UpdatesConfig controls automatic update checking.
+type UpdatesConfig struct {
+	Enabled       bool   `toml:"enabled"`        // default: true
+	CheckInterval string `toml:"check_interval"` // default: "24h", "0" to disable
 }
 
 // UIConfig controls CLI display behavior.
@@ -56,6 +63,10 @@ func DefaultConfig() *Config {
 		Agent: AgentConfig{
 			HeartbeatInterval: "30s",
 			StaleAfter:        "5m",
+		},
+		Updates: UpdatesConfig{
+			Enabled:       true,
+			CheckInterval: "24h",
 		},
 	}
 }
