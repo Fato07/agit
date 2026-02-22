@@ -6,7 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/fathindos/agit/internal/config"
 	gitops "github.com/fathindos/agit/internal/git"
+	"github.com/fathindos/agit/internal/hooks"
 	"github.com/fathindos/agit/internal/registry"
 	"github.com/fathindos/agit/internal/ui"
 	"github.com/fathindos/agit/internal/ui/interactive"
@@ -34,6 +36,9 @@ and asks for confirmation before removal.`,
 		if err != nil {
 			return err
 		}
+
+		cfg, _ := config.Load()
+		hookRunner := hooks.NewRunner(cfg)
 
 		// Prune orphaned worktrees first
 		for _, repo := range repos {
@@ -77,6 +82,11 @@ and asks for confirmation before removal.`,
 				}
 				gitops.DeleteBranch(repo.Path, wt.Branch)
 				db.DeleteWorktree(wt.ID)
+
+				hookRunner.Fire("worktree.removed", map[string]string{
+					"AGIT_REPO":        repo.Name,
+					"AGIT_WORKTREE_ID": wt.ID,
+				})
 
 				removedItems = append(removedItems, removedEntry{
 					ID:     wt.ID[:12],

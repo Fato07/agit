@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -578,6 +579,103 @@ func TestFindConflictsEmpty(t *testing.T) {
 	}
 }
 
+// --- NextTask ---
+
+func TestNextTaskHighestPriority(t *testing.T) {
+	db := mustOpenMemory(t)
+
+	repo, _ := db.AddRepo("nt", "/tmp/nt", "", "main")
+	agent, _ := db.RegisterAgent("nt-agent", "custom")
+
+	// Create tasks with different priorities
+	db.CreateTask(repo.ID, "low priority", 1)
+	db.CreateTask(repo.ID, "high priority", 10)
+	db.CreateTask(repo.ID, "medium priority", 5)
+
+	task, err := db.NextTask(repo.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("NextTask: %v", err)
+	}
+	if task == nil {
+		t.Fatal("expected a task, got nil")
+	}
+	if task.Priority != 10 {
+		t.Errorf("expected priority 10 (highest), got %d", task.Priority)
+	}
+	if task.Description != "high priority" {
+		t.Errorf("expected 'high priority', got %s", task.Description)
+	}
+	if task.Status != "claimed" {
+		t.Errorf("expected claimed status, got %s", task.Status)
+	}
+}
+
+func TestNextTaskFIFOTiebreak(t *testing.T) {
+	db := mustOpenMemory(t)
+
+	repo, _ := db.AddRepo("fifo", "/tmp/fifo", "", "main")
+	agent, _ := db.RegisterAgent("fifo-agent", "custom")
+
+	// Create tasks with same priority — FIFO by created_at
+	first, _ := db.CreateTask(repo.ID, "first created", 5)
+	db.CreateTask(repo.ID, "second created", 5)
+
+	task, err := db.NextTask(repo.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("NextTask: %v", err)
+	}
+	if task == nil {
+		t.Fatal("expected a task")
+	}
+	if task.ID != first.ID {
+		t.Errorf("expected first-created task %s, got %s", first.ID, task.ID)
+	}
+}
+
+func TestNextTaskNoPending(t *testing.T) {
+	db := mustOpenMemory(t)
+
+	repo, _ := db.AddRepo("np", "/tmp/np", "", "main")
+	agent, _ := db.RegisterAgent("np-agent", "custom")
+
+	task, err := db.NextTask(repo.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("NextTask: %v", err)
+	}
+	if task != nil {
+		t.Errorf("expected nil task, got %+v", task)
+	}
+}
+
+func TestNextTaskConcurrentClaim(t *testing.T) {
+	db := mustOpenMemory(t)
+
+	repo, _ := db.AddRepo("cc", "/tmp/cc", "", "main")
+	agent1, _ := db.RegisterAgent("agent-1", "custom")
+	agent2, _ := db.RegisterAgent("agent-2", "custom")
+
+	// Create 2 tasks
+	db.CreateTask(repo.ID, "task A", 10)
+	db.CreateTask(repo.ID, "task B", 5)
+
+	// Both agents claim — should get different tasks
+	t1, err := db.NextTask(repo.ID, agent1.ID)
+	if err != nil {
+		t.Fatalf("NextTask agent1: %v", err)
+	}
+	t2, err := db.NextTask(repo.ID, agent2.ID)
+	if err != nil {
+		t.Fatalf("NextTask agent2: %v", err)
+	}
+
+	if t1 == nil || t2 == nil {
+		t.Fatal("both agents should get a task")
+	}
+	if t1.ID == t2.ID {
+		t.Errorf("agents should claim different tasks, both got %s", t1.ID)
+	}
+}
+
 func TestRecordFileTouchesReplace(t *testing.T) {
 	db := mustOpenMemory(t)
 
@@ -603,5 +701,36 @@ func TestRecordFileTouchesReplace(t *testing.T) {
 	conflicts, _ := db.FindConflicts(repo.ID)
 	if len(conflicts) != 0 {
 		t.Errorf("expected 0 conflicts after replace, got %d", len(conflicts))
+	}
+}
+
+func BenchmarkNextTask(b *testing.B) {
+	db, err := OpenMemory()
+	if err != nil {
+		b.Fatalf("OpenMemory: %v", err)
+	}
+	defer db.Close()
+
+	repo, _ := db.AddRepo("bench-repo", "/tmp/bench", "", "main")
+	agent, _ := db.RegisterAgent("bench-agent", "custom")
+
+	// Insert 1,000 tasks with varying priorities
+	for i := 0; i < 1000; i++ {
+		priority := i % 10
+		db.CreateTask(repo.ID, fmt.Sprintf("task-%d", i), priority)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Re-create pending tasks for each iteration if depleted
+		task, _ := db.NextTask(repo.ID, agent.ID)
+		if task == nil {
+			// All claimed; reset by creating more
+			b.StopTimer()
+			for j := 0; j < 100; j++ {
+				db.CreateTask(repo.ID, fmt.Sprintf("refill-%d-%d", i, j), j%10)
+			}
+			b.StartTimer()
+		}
 	}
 }

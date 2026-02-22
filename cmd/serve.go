@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -62,8 +67,32 @@ Configure in your agent's MCP settings:
 			addr := fmt.Sprintf("127.0.0.1:%d", port)
 			sseServer := server.NewSSEServer(s)
 			log.Printf("agit MCP server listening on %s (SSE)\n", addr)
-			if err := sseServer.Start(addr); err != nil {
-				return fmt.Errorf("SSE server error: %w", err)
+
+			// Handle graceful shutdown on SIGTERM/SIGINT
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- sseServer.Start(addr)
+			}()
+
+			select {
+			case err := <-errCh:
+				if err != nil {
+					if strings.Contains(err.Error(), "address already in use") {
+						return apperrors.NewUserErrorf("port %d is already in use — try a different port with --port", port)
+					}
+					return fmt.Errorf("SSE server error: %w", err)
+				}
+			case sig := <-sigCh:
+				log.Printf("received %s, shutting down gracefully...", sig)
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := sseServer.Shutdown(ctx); err != nil {
+					log.Printf("shutdown error: %v", err)
+				}
+				log.Println("server stopped")
 			}
 		default:
 			return apperrors.NewUserErrorf("unknown transport %q (use stdio or sse)", transport)

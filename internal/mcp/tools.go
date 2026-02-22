@@ -301,9 +301,12 @@ func handleCheckConflicts(db *registry.DB) mcpserver.ToolHandlerFunc {
 			items = append(items, conflictItem{c.FilePath, c.Worktrees})
 		}
 
+		suggestions := conflicts.SuggestResolutionOrder(conflictList, worktrees)
+
 		return jsonResult(map[string]any{
 			"conflicts":         items,
 			"scanned_worktrees": len(worktrees),
+			"suggestions":       suggestions,
 		})
 	}
 }
@@ -728,6 +731,46 @@ func handleAddRepo(db *registry.DB) mcpserver.ToolHandlerFunc {
 			"path":           repo.Path,
 			"remote_url":     repo.RemoteURL,
 			"default_branch": repo.DefaultBranch,
+		})
+	}
+}
+
+func handleNextTask(db *registry.DB) mcpserver.ToolHandlerFunc {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		repoName, _ := request.Params.Arguments["repo"].(string)
+		if repoName == "" {
+			return nil, apperrors.NewUserError("repo parameter is required")
+		}
+		agentID, _ := request.Params.Arguments["agent_id"].(string)
+		if agentID == "" {
+			return nil, apperrors.NewUserError("agent_id parameter is required")
+		}
+
+		repo, err := db.GetRepo(repoName)
+		if err != nil {
+			return nil, err
+		}
+
+		task, err := db.NextTask(repo.ID, agentID)
+		if err != nil {
+			return nil, err
+		}
+
+		if task == nil {
+			return jsonResult(map[string]any{
+				"task":    nil,
+				"message": "no pending tasks",
+			})
+		}
+
+		return jsonResult(map[string]any{
+			"task": map[string]any{
+				"id":          task.ID,
+				"description": task.Description,
+				"priority":    task.Priority,
+				"status":      task.Status,
+				"agent_id":    task.AssignedAgentID,
+			},
 		})
 	}
 }
