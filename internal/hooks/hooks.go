@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/fathindos/agit/internal/config"
@@ -13,6 +14,7 @@ import (
 type Runner struct {
 	hooks   map[string]string
 	timeout time.Duration
+	wg      sync.WaitGroup
 }
 
 // NewRunner creates a Runner from the config. Returns nil if no hooks are configured.
@@ -55,7 +57,10 @@ func (r *Runner) Fire(event string, env map[string]string) {
 		envSlice = append(envSlice, k+"="+v)
 	}
 
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
+
 		ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 		defer cancel()
 
@@ -66,4 +71,13 @@ func (r *Runner) Fire(event string, env map[string]string) {
 			log.Printf("hook %q failed: %v", event, err)
 		}
 	}()
+}
+
+// Wait blocks until all fired hooks have completed or timed out.
+// Safe to call on a nil Runner.
+func (r *Runner) Wait() {
+	if r == nil {
+		return
+	}
+	r.wg.Wait()
 }

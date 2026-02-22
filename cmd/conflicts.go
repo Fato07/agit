@@ -60,6 +60,7 @@ in more than one worktree, indicating potential merge conflicts.`,
 
 		cfg, _ := config.Load()
 		hookRunner := hooks.NewRunner(cfg)
+		defer hookRunner.Wait()
 
 		allConflicts := make([]conflictJSON, 0)
 		var allSuggestions []conflicts.Suggestion

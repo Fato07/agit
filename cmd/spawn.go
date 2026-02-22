@@ -145,6 +145,7 @@ With -i (interactive), presents a selector if no repo is specified.`,
 
 		// Fire worktree.created hook
 		hookRunner := hooks.NewRunner(cfg)
+		defer hookRunner.Wait()
 		hookRunner.Fire("worktree.created", map[string]string{
 			"AGIT_REPO":        repoName,
 			"AGIT_WORKTREE_ID": wt.ID,

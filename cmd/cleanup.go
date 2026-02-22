@@ -39,6 +39,7 @@ and asks for confirmation before removal.`,
 
 		cfg, _ := config.Load()
 		hookRunner := hooks.NewRunner(cfg)
+		defer hookRunner.Wait()
 
 		// Prune orphaned worktrees first
 		for _, repo := range repos {

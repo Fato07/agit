@@ -46,6 +46,7 @@ var tasksCmd = &cobra.Command{
 
 		cfg, _ := config.Load()
 		hookRunner := hooks.NewRunner(cfg)
+		defer hookRunner.Wait()
 
 		repo, err := db.GetRepo(repoName)
 		if err != nil {
@@ -310,6 +311,16 @@ Returns nothing if no pending tasks exist.`,
 			fmt.Printf("No pending tasks for %s.\n", repoName)
 			return nil
 		}
+
+		// Fire task.claimed hook
+		cfg, _ := config.Load()
+		hookRunner := hooks.NewRunner(cfg)
+		defer hookRunner.Wait()
+		hookRunner.Fire("task.claimed", map[string]string{
+			"AGIT_REPO":    repoName,
+			"AGIT_TASK_ID": task.ID,
+			"AGIT_AGENT":   agent,
+		})
 
 		if ui.IsJSON() {
 			return ui.RenderJSON(map[string]interface{}{
