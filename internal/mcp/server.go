@@ -188,6 +188,15 @@ func registerTools(s *server.MCPServer, db *registry.DB, cfg *config.Config) {
 		),
 		withIssueLink(handleCleanupWorktrees(db)),
 	)
+
+	s.AddTool(
+		mcp.NewTool("agit_next_task",
+			mcp.WithDescription("Atomically claim the highest-priority pending task. Returns the claimed task or null if no pending tasks exist."),
+			mcp.WithString("repo", mcp.Required(), mcp.Description("Repository name")),
+			mcp.WithString("agent_id", mcp.Required(), mcp.Description("Agent ID claiming the task")),
+		),
+		withIssueLink(handleNextTask(db)),
+	)
 }
 
 func registerResources(s *server.MCPServer, db *registry.DB) {

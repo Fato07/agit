@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	toml "github.com/pelletier/go-toml/v2"
@@ -12,11 +13,13 @@ import (
 
 // Config represents the agit configuration file (~/.agit/config.toml)
 type Config struct {
-	Server   ServerConfig   `toml:"server"`
-	Defaults DefaultsConfig `toml:"defaults"`
-	Agent    AgentConfig    `toml:"agent"`
-	UI       UIConfig       `toml:"ui"`
-	Updates  UpdatesConfig  `toml:"updates"`
+	Server      ServerConfig      `toml:"server"`
+	Defaults    DefaultsConfig    `toml:"defaults"`
+	Agent       AgentConfig       `toml:"agent"`
+	UI          UIConfig          `toml:"ui"`
+	Updates     UpdatesConfig     `toml:"updates"`
+	Hooks       map[string]string `toml:"hooks,omitempty"`
+	HookTimeout string            `toml:"hook_timeout,omitempty"`
 }
 
 // UpdatesConfig controls automatic update checking.
@@ -70,6 +73,7 @@ func DefaultConfig() *Config {
 			Enabled:       true,
 			CheckInterval: "24h",
 		},
+		HookTimeout: "30s",
 	}
 }
 
@@ -159,6 +163,7 @@ func (c *Config) Validate() error {
 		{"agent.heartbeat_interval", c.Agent.HeartbeatInterval},
 		{"agent.stale_after", c.Agent.StaleAfter},
 		{"updates.check_interval", c.Updates.CheckInterval},
+		{"hook_timeout", c.HookTimeout},
 	} {
 		if _, err := time.ParseDuration(pair.val); err != nil {
 			return fmt.Errorf("invalid %s %q: %w", pair.key, pair.val, err)
@@ -196,6 +201,7 @@ func AllKeys() []string {
 		"ui.compact",
 		"updates.enabled",
 		"updates.check_interval",
+		"hook_timeout",
 	}
 }
 
@@ -244,7 +250,24 @@ func (c *Config) SetByDotKey(key, value string) error {
 		c.Updates.Enabled = v
 	case "updates.check_interval":
 		c.Updates.CheckInterval = value
+	case "hook_timeout":
+		c.HookTimeout = value
 	default:
+		if strings.HasPrefix(key, "hooks.") {
+			event := strings.TrimPrefix(key, "hooks.")
+			if event == "" {
+				return fmt.Errorf("invalid hooks key: event name required")
+			}
+			if c.Hooks == nil {
+				c.Hooks = make(map[string]string)
+			}
+			if value == "" {
+				delete(c.Hooks, event)
+			} else {
+				c.Hooks[event] = value
+			}
+			return nil
+		}
 		return fmt.Errorf("unknown config key %q", key)
 	}
 	return nil
@@ -279,7 +302,16 @@ func (c *Config) GetByDotKey(key string) (string, error) {
 		return strconv.FormatBool(c.Updates.Enabled), nil
 	case "updates.check_interval":
 		return c.Updates.CheckInterval, nil
+	case "hook_timeout":
+		return c.HookTimeout, nil
 	default:
+		if strings.HasPrefix(key, "hooks.") {
+			event := strings.TrimPrefix(key, "hooks.")
+			if c.Hooks != nil {
+				return c.Hooks[event], nil
+			}
+			return "", nil
+		}
 		return "", fmt.Errorf("unknown config key %q", key)
 	}
 }

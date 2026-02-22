@@ -21,7 +21,8 @@ agit provides:
 - **Persistent registry** — agents always know what repos are available via MCP
 - **Worktree isolation** — each agent gets its own workspace, no stepping on toes
 - **Conflict detection** — know about overlapping changes before merge time
-- **Task coordination** — agents claim work, preventing duplication
+- **Task coordination** — agents claim work atomically, preventing duplication
+- **Hook system** — trigger custom scripts on worktree, task, and conflict events
 
 ## Quick Start
 
@@ -85,7 +86,8 @@ Now any MCP-compatible agent can call `agit_list_repos()` on startup and immedia
 | `agit spawn <repo>` | Create isolated worktree for an agent |
 | `agit status [repo]` | Show worktrees, agents, conflicts |
 | `agit conflicts [repo]` | Check for overlapping file changes |
-| `agit tasks <repo>` | Manage tasks (create/claim/complete) |
+| `agit tasks <repo>` | Manage tasks (create/claim/complete/next) |
+| `agit agents` | List and manage registered AI agents |
 | `agit merge <id>` | Merge worktree back to base branch |
 | `agit cleanup` | Remove completed/stale worktrees |
 | `agit serve` | Start MCP server (stdio or SSE) |
@@ -131,11 +133,26 @@ compact = false           # Compact output mode
 [updates]
 enabled = true            # Enable automatic update checking
 check_interval = "24h"   # How often to check for updates
+
+hook_timeout = "30s"      # Maximum execution time for hooks
+
+[hooks]
+# Run shell commands on events (async, non-blocking)
+# "worktree.created" = "notify-send 'New worktree created'"
+# "task.claimed" = "echo $AGIT_TASK_ID >> /tmp/claimed.log"
+# "task.completed" = "./scripts/on-task-done.sh"
+# "task.failed" = "curl -X POST https://hooks.example.com/fail"
+# "worktree.removed" = "echo cleaned"
+# "conflict.detected" = "slack-notify 'Conflict found'"
 ```
+
+**Supported hook events**: `worktree.created`, `worktree.removed`, `task.claimed`, `task.completed`, `task.failed`, `conflict.detected`
+
+Hooks receive environment variables: `AGIT_EVENT`, plus event-specific variables like `AGIT_WORKTREE_ID`, `AGIT_TASK_ID`, `AGIT_REPO`.
 
 All dot-notation keys for `agit config set`:
 
-`server.transport`, `server.port`, `defaults.branch_prefix`, `defaults.worktree_dir`, `defaults.cleanup_stale_after`, `defaults.auto_conflict_check`, `agent.heartbeat_interval`, `agent.stale_after`, `ui.color`, `ui.output_format`, `ui.compact`, `updates.enabled`, `updates.check_interval`
+`server.transport`, `server.port`, `defaults.branch_prefix`, `defaults.worktree_dir`, `defaults.cleanup_stale_after`, `defaults.auto_conflict_check`, `agent.heartbeat_interval`, `agent.stale_after`, `ui.color`, `ui.output_format`, `ui.compact`, `updates.enabled`, `updates.check_interval`, `hook_timeout`, `hooks.<event>`
 
 ## MCP Tools Reference
 
@@ -162,6 +179,7 @@ When running as an MCP server (`agit serve`), the following tools are available 
 | `agit_get_task` | Get detailed information about a specific task |
 | `agit_add_repo` | Register a Git repository via MCP |
 | `agit_cleanup_worktrees` | Prune orphaned worktrees |
+| `agit_next_task` | Atomically claim the highest-priority pending task |
 
 ## License
 

@@ -11,6 +11,7 @@ import (
 	"github.com/fathindos/agit/internal/config"
 	apperrors "github.com/fathindos/agit/internal/errors"
 	gitops "github.com/fathindos/agit/internal/git"
+	"github.com/fathindos/agit/internal/hooks"
 	"github.com/fathindos/agit/internal/registry"
 	"github.com/fathindos/agit/internal/ui"
 	"github.com/fathindos/agit/internal/ui/interactive"
@@ -141,6 +142,13 @@ With -i (interactive), presents a selector if no repo is specified.`,
 		if agentID != nil {
 			db.UpdateAgentWorktree(*agentID, &wt.ID)
 		}
+
+		// Fire worktree.created hook
+		hookRunner := hooks.NewRunner(cfg)
+		hookRunner.Fire("worktree.created", map[string]string{
+			"AGIT_REPO":        repoName,
+			"AGIT_WORKTREE_ID": wt.ID,
+		})
 
 		if ui.IsJSON() {
 			result := map[string]string{

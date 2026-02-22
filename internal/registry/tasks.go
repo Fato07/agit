@@ -97,6 +97,53 @@ func (db *DB) FailTask(taskID string, result *string) error {
 	return err
 }
 
+// NextTask atomically claims the highest-priority pending task for a repo.
+// Returns nil if no pending tasks exist. Priority DESC, then FIFO by created_at ASC.
+func (db *DB) NextTask(repoID, agentID string) (*Task, error) {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("could not begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Atomically update the highest-priority pending task
+	result, err := tx.Exec(
+		`UPDATE tasks SET status = 'claimed', assigned_agent_id = ?
+		 WHERE id = (
+		   SELECT id FROM tasks
+		   WHERE repo_id = ? AND status = 'pending'
+		   ORDER BY priority DESC, created_at ASC
+		   LIMIT 1
+		 )`,
+		agentID, repoID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not claim next task: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return nil, nil // No pending tasks
+	}
+
+	// Fetch the task we just claimed
+	t := &Task{}
+	err = tx.QueryRow(
+		`SELECT id, repo_id, description, priority, status, assigned_agent_id, worktree_id, created_at, completed_at, result
+		 FROM tasks WHERE repo_id = ? AND assigned_agent_id = ? AND status = 'claimed'
+		 ORDER BY priority DESC, created_at ASC LIMIT 1`,
+		repoID, agentID,
+	).Scan(&t.ID, &t.RepoID, &t.Description, &t.Priority, &t.Status, &t.AssignedAgentID,
+		&t.WorktreeID, &t.CreatedAt, &t.CompletedAt, &t.Result)
+	if err != nil {
+		return nil, fmt.Errorf("could not fetch claimed task: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("could not commit transaction: %w", err)
+	}
+	return t, nil
+}
+
 // GetTask retrieves a task by ID
 func (db *DB) GetTask(id string) (*Task, error) {
 	t := &Task{}

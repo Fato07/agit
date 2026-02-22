@@ -17,7 +17,7 @@ import (
 	"github.com/fathindos/agit/internal/update"
 )
 
-var Version = "0.3.0"
+var Version = "0.4.0"
 
 // updateNotice carries a message from the background update checker.
 var updateNotice chan string

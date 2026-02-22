@@ -5,7 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/fathindos/agit/internal/config"
 	apperrors "github.com/fathindos/agit/internal/errors"
+	"github.com/fathindos/agit/internal/hooks"
 	"github.com/fathindos/agit/internal/registry"
 	"github.com/fathindos/agit/internal/ui"
 	"github.com/fathindos/agit/internal/ui/interactive"
@@ -41,6 +43,9 @@ var tasksCmd = &cobra.Command{
 			return fmt.Errorf("could not open registry: %w", err)
 		}
 		defer db.Close()
+
+		cfg, _ := config.Load()
+		hookRunner := hooks.NewRunner(cfg)
 
 		repo, err := db.GetRepo(repoName)
 		if err != nil {
@@ -83,6 +88,11 @@ var tasksCmd = &cobra.Command{
 			if err := db.ClaimTask(claim, agentObj.ID); err != nil {
 				return err
 			}
+			hookRunner.Fire("task.claimed", map[string]string{
+				"AGIT_REPO":     repoName,
+				"AGIT_TASK_ID":  claim,
+				"AGIT_AGENT_ID": agent,
+			})
 			if ui.IsJSON() {
 				return ui.RenderJSON(map[string]string{"status": "ok", "message": "claimed", "task": claim, "agent": agent})
 			}
@@ -95,6 +105,10 @@ var tasksCmd = &cobra.Command{
 			if err := db.CompleteTask(complete, resultPtr); err != nil {
 				return err
 			}
+			hookRunner.Fire("task.completed", map[string]string{
+				"AGIT_REPO":    repoName,
+				"AGIT_TASK_ID": complete,
+			})
 			if ui.IsJSON() {
 				return ui.RenderJSON(map[string]string{"status": "ok", "message": "completed", "task": complete})
 			}
@@ -107,6 +121,10 @@ var tasksCmd = &cobra.Command{
 			if err := db.FailTask(fail, resultPtr); err != nil {
 				return err
 			}
+			hookRunner.Fire("task.failed", map[string]string{
+				"AGIT_REPO":    repoName,
+				"AGIT_TASK_ID": fail,
+			})
 			if ui.IsJSON() {
 				return ui.RenderJSON(map[string]string{"status": "ok", "message": "failed", "task": fail})
 			}
@@ -241,6 +259,77 @@ func tasksInteractive(db *registry.DB, repo *registry.Repo) error {
 	return nil
 }
 
+var tasksNextCmd = &cobra.Command{
+	Use:   "next <repo>",
+	Short: "Claim the highest-priority pending task",
+	Long: `Atomically claims and returns the highest-priority pending task for the given
+repository. If multiple tasks share the highest priority, the oldest (FIFO) is chosen.
+Returns nothing if no pending tasks exist.`,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeRepoNames,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		repoName := args[0]
+		agent, _ := cmd.Flags().GetString("agent")
+
+		if agent == "" {
+			return apperrors.NewUserError("--agent is required for tasks next")
+		}
+
+		db, err := registry.Open()
+		if err != nil {
+			return fmt.Errorf("could not open registry: %w", err)
+		}
+		defer db.Close()
+
+		repo, err := db.GetRepo(repoName)
+		if err != nil {
+			return err
+		}
+
+		// Resolve or register agent
+		agentObj, err := db.GetAgentByName(agent)
+		if err != nil {
+			return err
+		}
+		if agentObj == nil {
+			agentObj, err = db.RegisterAgent(agent, "custom")
+			if err != nil {
+				return err
+			}
+		}
+
+		task, err := db.NextTask(repo.ID, agentObj.ID)
+		if err != nil {
+			return err
+		}
+
+		if task == nil {
+			if ui.IsJSON() {
+				return ui.RenderJSON(map[string]interface{}{"status": "ok", "message": "no_pending_tasks", "task": nil})
+			}
+			fmt.Printf("No pending tasks for %s.\n", repoName)
+			return nil
+		}
+
+		if ui.IsJSON() {
+			return ui.RenderJSON(map[string]interface{}{
+				"status":      "ok",
+				"message":     "claimed",
+				"id":          task.ID,
+				"description": task.Description,
+				"priority":    task.Priority,
+				"agent":       agent,
+			})
+		}
+
+		ui.Success("Claimed task: %s", task.ID)
+		ui.KeyValue("Description", task.Description)
+		ui.KeyValue("Priority", fmt.Sprintf("%d", task.Priority))
+		ui.KeyValue("Agent", agent)
+		return nil
+	},
+}
+
 func init() {
 	tasksCmd.Flags().String("create", "", "Create a new task with this description")
 	tasksCmd.Flags().Int("priority", 0, "Task priority (0=normal, 1=high, 2=critical)")
@@ -249,5 +338,9 @@ func init() {
 	tasksCmd.Flags().String("fail", "", "Fail a task by ID")
 	tasksCmd.Flags().String("result", "", "Result message (used with --complete or --fail)")
 	tasksCmd.Flags().StringP("agent", "a", "", "Agent name (required for --claim)")
+
+	tasksNextCmd.Flags().StringP("agent", "a", "", "Agent name (required)")
+	tasksCmd.AddCommand(tasksNextCmd)
+
 	rootCmd.AddCommand(tasksCmd)
 }

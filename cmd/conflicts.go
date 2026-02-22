@@ -5,7 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/fathindos/agit/internal/config"
+	"github.com/fathindos/agit/internal/conflicts"
 	gitops "github.com/fathindos/agit/internal/git"
+	"github.com/fathindos/agit/internal/hooks"
 	"github.com/fathindos/agit/internal/registry"
 	"github.com/fathindos/agit/internal/ui"
 )
@@ -20,6 +23,11 @@ type conflictWtJSON struct {
 	ID    string `json:"id"`
 	Agent string `json:"agent,omitempty"`
 	Task  string `json:"task,omitempty"`
+}
+
+type conflictsOutputJSON struct {
+	Conflicts   []conflictJSON         `json:"conflicts"`
+	Suggestions []conflicts.Suggestion `json:"suggestions,omitempty"`
 }
 
 var conflictsCmd = &cobra.Command{
@@ -50,7 +58,11 @@ in more than one worktree, indicating potential merge conflicts.`,
 			}
 		}
 
+		cfg, _ := config.Load()
+		hookRunner := hooks.NewRunner(cfg)
+
 		allConflicts := make([]conflictJSON, 0)
+		var allSuggestions []conflicts.Suggestion
 		totalConflicts := 0
 
 		for _, repo := range repos {
@@ -93,12 +105,12 @@ in more than one worktree, indicating potential merge conflicts.`,
 			}
 
 			// Find conflicts
-			conflicts, err := db.FindConflicts(repo.ID)
+			repoConflicts, err := db.FindConflicts(repo.ID)
 			if err != nil {
 				return fmt.Errorf("could not check conflicts: %w", err)
 			}
 
-			if len(conflicts) == 0 {
+			if len(repoConflicts) == 0 {
 				if !ui.IsJSON() {
 					ui.Success("No conflicts detected in %s", repo.Name)
 					ui.Blank()
@@ -106,7 +118,7 @@ in more than one worktree, indicating potential merge conflicts.`,
 				continue
 			}
 
-			for _, c := range conflicts {
+			for _, c := range repoConflicts {
 				if ui.IsJSON() {
 					cj := conflictJSON{Repo: repo.Name, File: c.FilePath}
 					for i, wtID := range c.Worktrees {
@@ -147,11 +159,33 @@ in more than one worktree, indicating potential merge conflicts.`,
 				}
 			}
 
-			totalConflicts += len(conflicts)
+			// Generate resolution suggestions
+			suggestions := conflicts.SuggestResolutionOrder(repoConflicts, worktrees)
+			if len(suggestions) > 0 {
+				allSuggestions = append(allSuggestions, suggestions...)
+				if !ui.IsJSON() {
+					fmt.Println("Suggested resolution order:")
+					for _, s := range suggestions {
+						fmt.Printf("  %d. %s (%d conflicting file(s)) — %s\n",
+							s.Order, s.WorktreeID[:12], s.ConflictingFiles, s.Rationale)
+					}
+					ui.Blank()
+				}
+			}
+
+			totalConflicts += len(repoConflicts)
+
+			// Fire conflict.detected hook
+			hookRunner.Fire("conflict.detected", map[string]string{
+				"AGIT_REPO": repo.Name,
+			})
 		}
 
 		if ui.IsJSON() {
-			return ui.RenderJSON(allConflicts)
+			return ui.RenderJSON(conflictsOutputJSON{
+				Conflicts:   allConflicts,
+				Suggestions: allSuggestions,
+			})
 		}
 
 		if totalConflicts > 0 {

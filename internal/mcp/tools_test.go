@@ -333,6 +333,63 @@ func TestWithIssueLink(t *testing.T) {
 	}
 }
 
+func TestHandleNextTask(t *testing.T) {
+	db := mustDB(t)
+	repo, _ := db.AddRepo("nt-repo", "/tmp/nt", "", "main")
+	agent, _ := db.RegisterAgent("nt-agent", "custom")
+
+	// Create tasks with different priorities
+	db.CreateTask(repo.ID, "low prio", 1)
+	db.CreateTask(repo.ID, "high prio", 10)
+	db.CreateTask(repo.ID, "med prio", 5)
+
+	handler := handleNextTask(db)
+	result := callTool(t, handler, map[string]any{
+		"repo":     "nt-repo",
+		"agent_id": agent.ID,
+	})
+
+	task, ok := result["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected task map, got %v", result["task"])
+	}
+	if task["description"] != "high prio" {
+		t.Errorf("expected highest priority task, got %v", task["description"])
+	}
+}
+
+func TestHandleNextTaskNoPending(t *testing.T) {
+	db := mustDB(t)
+	db.AddRepo("nt2-repo", "/tmp/nt2", "", "main")
+	agent, _ := db.RegisterAgent("nt2-agent", "custom")
+
+	handler := handleNextTask(db)
+	result := callTool(t, handler, map[string]any{
+		"repo":     "nt2-repo",
+		"agent_id": agent.ID,
+	})
+
+	if result["task"] != nil {
+		t.Errorf("expected nil task, got %v", result["task"])
+	}
+	if result["message"] != "no pending tasks" {
+		t.Errorf("expected 'no pending tasks' message, got %v", result["message"])
+	}
+}
+
+func TestHandleNextTaskMissingParams(t *testing.T) {
+	db := mustDB(t)
+
+	handler := handleNextTask(db)
+
+	if err := callToolExpectError(t, handler, map[string]any{}); err == nil {
+		t.Fatal("expected error for missing repo")
+	}
+	if err := callToolExpectError(t, handler, map[string]any{"repo": "x"}); err == nil {
+		t.Fatal("expected error for missing agent_id")
+	}
+}
+
 // Verify NewServer creates server with all tools
 func TestNewServer(t *testing.T) {
 	db := mustDB(t)
