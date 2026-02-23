@@ -82,20 +82,29 @@ For scenarios where agit runs on a different machine than the agent, use SSE tra
 
 ## Available Tools and Resources
 
-agit exposes 11 MCP tools and 5 MCP resources. See the [architecture specification](agit-architecture-spec.pdf) Section 5 for the complete list.
+agit exposes **20 MCP tools** and **5 MCP resources**.
 
 **Tools** (actions):
 - `agit_list_repos` - List registered repositories
-- `agit_register_repo` - Register a new repository
-- `agit_spawn_worktree` - Create an isolated worktree
-- `agit_merge_worktree` - Merge a worktree back
-- `agit_check_conflicts` - Detect overlapping changes
-- `agit_list_tasks` - List tasks for a repo
-- `agit_create_task` - Create a new task
-- `agit_claim_task` - Claim a task for an agent
-- `agit_complete_task` - Mark a task as complete
-- `agit_register_agent` - Register an agent
-- `agit_heartbeat` - Update agent heartbeat
+- `agit_add_repo` - Register a Git repository via MCP
+- `agit_repo_status` - Get detailed status for a specific repository
+- `agit_spawn_worktree` - Create an isolated worktree for an agent
+- `agit_remove_worktree` - Remove a worktree from disk and registry
+- `agit_list_worktrees` - List worktrees for a repository
+- `agit_merge_worktree` - Merge a worktree branch into the default branch
+- `agit_check_conflicts` - Detect overlapping changes across active worktrees (includes resolution suggestions)
+- `agit_list_tasks` - List tasks for a repository
+- `agit_create_task` - Create a new task for a repository
+- `agit_get_task` - Get detailed information about a specific task
+- `agit_claim_task` - Atomically claim a pending task for an agent
+- `agit_next_task` - Atomically claim the highest-priority pending task
+- `agit_start_task` - Mark a claimed task as in-progress with a worktree
+- `agit_complete_task` - Mark a task as completed with optional result
+- `agit_fail_task` - Mark a task as failed with optional reason
+- `agit_register_agent` - Register a new AI agent
+- `agit_list_agents` - List all registered AI agents
+- `agit_heartbeat` - Update agent heartbeat timestamp
+- `agit_cleanup_worktrees` - Prune orphaned worktrees
 
 **Resources** (read-only state):
 - `agit://repos` - All registered repositories

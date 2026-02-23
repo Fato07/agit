@@ -56,8 +56,7 @@ agit merge <worktree-id> --cleanup
 
 ## Demo
 
-<!-- Record with: https://github.com/charmbracelet/vhs -->
-_Demo recording coming soon._
+![agit demo](docs/demo.gif)
 
 ## MCP Integration
 

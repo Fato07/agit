@@ -19,7 +19,7 @@ make build
 ./agit repos
 ```
 
-Requires Go 1.22 or later.
+Requires Go 1.23 or later.
 
 ## Project Structure
 
@@ -31,6 +31,8 @@ Requires Go 1.22 or later.
 | `internal/mcp/` | MCP server (tools, resources, server factory) |
 | `internal/conflicts/` | Cross-worktree conflict detection |
 | `internal/config/` | Configuration management |
+| `internal/hooks/` | Lifecycle hook runner (async execution with timeout) |
+| `internal/update/` | Self-update and version checking |
 | `docs/` | Architecture spec and integration guides |
 
 See the [architecture specification](docs/agit-architecture-spec.pdf) for detailed design.
